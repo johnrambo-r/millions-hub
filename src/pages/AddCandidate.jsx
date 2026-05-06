@@ -133,6 +133,22 @@ export default function AddCandidate() {
     setSubmitting(true)
     setFormError('')
 
+    // Upload resume first so the public URL can go into the insert payload
+    let publicUrl = null
+    if (resumeFile) {
+      const filePath = `${candidateId}/${resumeFile.name}`
+      const { error: uploadError } = await supabase.storage
+        .from('resumes')
+        .upload(filePath, resumeFile)
+
+      if (uploadError) {
+        console.warn('[AddCandidate] resume upload failed:', uploadError.message)
+      } else {
+        const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
+        publicUrl = urlData.publicUrl
+      }
+    }
+
     const now = new Date().toISOString()
     const payload = {
       id:                 candidateId,
@@ -161,7 +177,10 @@ export default function AddCandidate() {
       interview_time:     form.interview_time || null,
       comments:           form.comments.trim() || null,
       status_changed_at:  now,
+      resume_url:         publicUrl,
     }
+
+    console.log('[AddCandidate] publicUrl:', publicUrl)
 
     const { data: inserted, error: insertError } = await supabase
       .from('candidates')
@@ -173,24 +192,6 @@ export default function AddCandidate() {
       setFormError(insertError.message)
       setSubmitting(false)
       return
-    }
-
-    // Resume upload (non-blocking on failure)
-    if (resumeFile) {
-      const { error: uploadError } = await supabase.storage
-        .from('resumes')
-        .upload(`${inserted.id}/${resumeFile.name}`, resumeFile)
-
-      if (uploadError) {
-        console.warn('[AddCandidate] resume upload failed:', uploadError.message)
-      } else {
-        const filePath = `${inserted.id}/${resumeFile.name}`
-        const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
-        await supabase
-          .from('candidates')
-          .update({ resume_url: urlData.publicUrl })
-          .eq('id', inserted.id)
-      }
     }
 
     // First status history row
