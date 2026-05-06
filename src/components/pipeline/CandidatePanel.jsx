@@ -404,6 +404,113 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
             <StatusBadge value={candidate?.status} />
           </div>
 
+          {/* Inline edit controls — hidden during general edit */}
+          {!isEditing && (
+            <>
+              <div className="pb-2">
+                <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">
+                  Update stage / status
+                </h3>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
+                      Stage
+                    </label>
+                    <select
+                      value={editStage}
+                      onChange={handleEditStageChange}
+                      className={fldCls}
+                    >
+                      <option value="">Select stage</option>
+                      {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
+                      Status
+                    </label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => { setEditStatus(e.target.value); setSaveError('') }}
+                      disabled={!editStage}
+                      className={`${fldCls} ${!editStage ? 'text-[#999] bg-[#FAFAFA] cursor-not-allowed' : ''}`}
+                    >
+                      <option value="">{editStage ? 'Select status' : 'Select stage first'}</option>
+                      {editStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {saveError && (
+                  <p className="text-xs text-[#D93025] mt-2">{saveError}</p>
+                )}
+
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={handleSave}
+                    disabled={saving || !editStage || !editStatus}
+                    className="h-9 px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: '#5E6AD2' }}
+                  >
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pb-2">
+                <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">
+                  Update interview
+                </h3>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
+                      Interview date
+                    </label>
+                    <input
+                      type="date"
+                      value={editInterviewDate}
+                      onChange={(e) => { setEditInterviewDate(e.target.value); setInterviewError('') }}
+                      className={fldCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
+                      Interview time
+                    </label>
+                    <input
+                      type="time"
+                      value={editInterviewTime}
+                      onChange={(e) => { setEditInterviewTime(e.target.value); setInterviewError('') }}
+                      className={fldCls}
+                    />
+                  </div>
+                </div>
+
+                {interviewError && (
+                  <p className="text-xs text-[#D93025] mt-2">{interviewError}</p>
+                )}
+                {interviewSuccess && (
+                  <p className="text-xs text-green-600 mt-2">Interview details saved.</p>
+                )}
+
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={handleInterviewSave}
+                    disabled={interviewSaving}
+                    className="h-9 px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: '#5E6AD2' }}
+                  >
+                    {interviewSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          <hr className="border-[#F0F0F4]" />
+
           {isEditing ? (
             /* ── Edit form ────────────────────────────────────────────── */
             <div>
@@ -621,114 +728,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
               </ol>
             )}
           </div>
-
-          {/* Update stage / status — hidden during general edit */}
-          {!isEditing && (
-            <>
-              <hr className="border-[#F0F0F4]" />
-              <div className="pb-2">
-                <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">
-                  Update stage / status
-                </h3>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
-                      Stage
-                    </label>
-                    <select
-                      value={editStage}
-                      onChange={handleEditStageChange}
-                      className={fldCls}
-                    >
-                      <option value="">Select stage</option>
-                      {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
-                      Status
-                    </label>
-                    <select
-                      value={editStatus}
-                      onChange={(e) => { setEditStatus(e.target.value); setSaveError('') }}
-                      disabled={!editStage}
-                      className={`${fldCls} ${!editStage ? 'text-[#999] bg-[#FAFAFA] cursor-not-allowed' : ''}`}
-                    >
-                      <option value="">{editStage ? 'Select status' : 'Select stage first'}</option>
-                      {editStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {saveError && (
-                  <p className="text-xs text-[#D93025] mt-2">{saveError}</p>
-                )}
-
-                <div className="mt-3 flex justify-end">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving || !editStage || !editStatus}
-                    className="h-9 px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: '#5E6AD2' }}
-                  >
-                    {saving ? 'Saving…' : 'Save'}
-                  </button>
-                </div>
-              </div>
-
-              <hr className="border-[#F0F0F4]" />
-
-              <div className="pb-2">
-                <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">
-                  Update interview
-                </h3>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
-                      Interview date
-                    </label>
-                    <input
-                      type="date"
-                      value={editInterviewDate}
-                      onChange={(e) => { setEditInterviewDate(e.target.value); setInterviewError('') }}
-                      className={fldCls}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
-                      Interview time
-                    </label>
-                    <input
-                      type="time"
-                      value={editInterviewTime}
-                      onChange={(e) => { setEditInterviewTime(e.target.value); setInterviewError('') }}
-                      className={fldCls}
-                    />
-                  </div>
-                </div>
-
-                {interviewError && (
-                  <p className="text-xs text-[#D93025] mt-2">{interviewError}</p>
-                )}
-                {interviewSuccess && (
-                  <p className="text-xs text-green-600 mt-2">Interview details saved.</p>
-                )}
-
-                <div className="mt-3 flex justify-end">
-                  <button
-                    onClick={handleInterviewSave}
-                    disabled={interviewSaving}
-                    className="h-9 px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: '#5E6AD2' }}
-                  >
-                    {interviewSaving ? 'Saving…' : 'Save'}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
         </div>
       </div>
     </>
