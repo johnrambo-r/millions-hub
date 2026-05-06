@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { useBlocker } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import FormSection from '../components/add-candidate/FormSection'
 import FormField, { inputCls, inputReadOnly } from '../components/add-candidate/FormField'
 import DuplicateModal from '../components/add-candidate/DuplicateModal'
 import SuccessToast from '../components/add-candidate/SuccessToast'
-import UnsavedChangesModal from '../components/UnsavedChangesModal'
 import { useAuth } from '../context/AuthContext'
 import { useProfile } from '../hooks/useProfile'
 import { useClients } from '../hooks/useClients'
@@ -91,16 +89,17 @@ export default function AddCandidate() {
   const [fileKey, setFileKey] = useState(0)
   const fileInputRef = useRef(null)
   const [formError, setFormError] = useState('')
-  const [navDialog, setNavDialog] = useState(false)
-  const [navDialogSaving, setNavDialogSaving] = useState(false)
 
   const isDirty = Object.keys(INITIAL).some((key) => form[key] !== INITIAL[key]) || !!resumeFile
 
-  const blocker = useBlocker(isDirty)
-
   useEffect(() => {
-    if (blocker.state === 'blocked') setNavDialog(true)
-  }, [blocker.state])
+    if (isDirty) {
+      window.onbeforeunload = () => true
+    } else {
+      window.onbeforeunload = null
+    }
+    return () => { window.onbeforeunload = null }
+  }, [isDirty])
 
   function setField(key, value) {
     setForm((p) => ({ ...p, [key]: value }))
@@ -574,37 +573,6 @@ export default function AddCandidate() {
       />
 
       <SuccessToast candidateId={toast} onDismiss={() => setToast('')} />
-
-      {navDialog && (
-        <UnsavedChangesModal
-          message="Are you sure you want to leave? Your form data will be lost."
-          saving={navDialogSaving}
-          onSave={async () => {
-            setNavDialogSaving(true)
-            const result = await submitCandidate(false)
-            setNavDialogSaving(false)
-            if (result?.success) {
-              setNavDialog(false)
-              blocker.proceed()
-            } else {
-              setNavDialog(false)
-              blocker.reset()
-            }
-          }}
-          onDiscard={() => {
-            setForm(INITIAL)
-            setErrors({})
-            setResumeFile(null)
-            setFileKey((k) => k + 1)
-            setNavDialog(false)
-            blocker.proceed()
-          }}
-          onCancel={() => {
-            setNavDialog(false)
-            blocker.reset()
-          }}
-        />
-      )}
     </AppShell>
   )
 }

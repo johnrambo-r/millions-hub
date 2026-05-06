@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useBlocker } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { StageBadge, StatusBadge } from './StageBadge'
@@ -68,6 +67,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   // Resume upload
   const [resumeFile, setResumeFile] = useState(null)
   const resumeFileRef = useRef(null)
+  const originalFieldsRef = useRef({})
 
   // Inline interview date/time
   const [editInterviewDate, setEditInterviewDate] = useState('')
@@ -78,33 +78,22 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
   const isOpen = !!candidate
 
-  // Block in-app navigation when in edit mode with unsaved changes
-  const blocker = useBlocker(isEditing && isDirty)
-
   useEffect(() => {
-    if (blocker.state !== 'blocked') return
-    setDialog({
-      message: 'Do you want to save your changes before leaving?',
-      onSave: async () => {
-        setDialogSaving(true)
-        const ok = await performSave()
-        setDialogSaving(false)
-        setDialog(null)
-        if (ok) blocker.proceed()
-        else blocker.reset()
-      },
-      onDiscard: () => {
-        resetEditState()
-        setDialog(null)
-        blocker.proceed()
-      },
-      onCancel: () => {
-        blocker.reset()
-        setDialog(null)
-      },
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocker.state])
+    if (isDirty) {
+      window.onbeforeunload = () => true
+    } else {
+      window.onbeforeunload = null
+    }
+    return () => { window.onbeforeunload = null }
+  }, [isDirty])
+
+  // Compute isDirty by comparing current editFields against the values loaded when edit started
+  useEffect(() => {
+    if (!isEditing) return
+    const orig = originalFieldsRef.current
+    const dirty = !!resumeFile || Object.keys(editFields).some((k) => editFields[k] !== orig[k])
+    setIsDirty(dirty)
+  }, [editFields, resumeFile, isEditing])
 
   useEffect(() => {
     if (!candidate) {
@@ -197,7 +186,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   }
 
   function handleRequestClose() {
-    if (isEditing && isDirty) {
+    if (isDirty) {
       setDialog({
         message: 'Do you want to save your changes before closing?',
         onSave: async () => {
@@ -287,7 +276,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
   function handleEditStart() {
     setResumeFile(null)
-    setEditFields({
+    const fields = {
       name:               candidate.name ?? '',
       email:              candidate.email ?? '',
       phone:              candidate.phone ?? '',
@@ -308,7 +297,9 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       interview_date:     candidate.interview_date ?? '',
       interview_time:     candidate.interview_time ?? '',
       comments:           candidate.comments ?? '',
-    })
+    }
+    originalFieldsRef.current = { ...fields }
+    setEditFields(fields)
     setEditError('')
     setEditSuccess(false)
     setIsDirty(false)
@@ -317,7 +308,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
   function setEditField(key, value) {
     setEditFields((prev) => ({ ...prev, [key]: value }))
-    setIsDirty(true)
   }
 
   function handleEditCancel() {
@@ -740,7 +730,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                     type="file"
                     accept=".pdf,.doc,.docx"
                     className="hidden"
-                    onChange={(e) => { setResumeFile(e.target.files?.[0] ?? null); setIsDirty(true) }}
+                    onChange={(e) => { setResumeFile(e.target.files?.[0] ?? null) }}
                   />
                   <div className="flex items-center gap-3 h-9">
                     <button
