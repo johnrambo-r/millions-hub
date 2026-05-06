@@ -28,6 +28,16 @@ export function IconAddCandidate({ className }) {
   )
 }
 
+export function IconClients({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="3" y="7" width="14" height="11" rx="1" />
+      <path d="M3 11h14" strokeLinecap="round" />
+      <path d="M7 7V5a3 3 0 016 0v2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function IconSettings({ className }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">

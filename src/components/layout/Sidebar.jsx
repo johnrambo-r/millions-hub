@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { IconDashboard, IconPipeline, IconAddCandidate, IconSettings } from './NavIcons'
+import { IconDashboard, IconPipeline, IconAddCandidate, IconClients, IconSettings } from './NavIcons'
 import { useProfile } from '../../hooks/useProfile'
 
 const NAV = [
   { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
   { to: '/pipeline', icon: IconPipeline, label: 'Pipeline' },
+  { to: '/clients', icon: IconClients, label: 'Clients' },
   { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
   { to: '/settings', icon: IconSettings, label: 'Settings' },
 ]
