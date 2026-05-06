@@ -186,9 +186,15 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   }
 
   function handleRequestClose() {
-    if (isDirty) {
+    const orig = originalFieldsRef.current
+    const currentlyDirty = isEditing && (
+      !!resumeFile ||
+      Object.keys(editFields).some((k) => editFields[k] !== orig[k])
+    )
+
+    if (currentlyDirty) {
       setDialog({
-        message: 'Do you want to save your changes before closing?',
+        message: 'You have unsaved changes. What would you like to do?',
         onSave: async () => {
           setDialogSaving(true)
           const ok = await performSave()
