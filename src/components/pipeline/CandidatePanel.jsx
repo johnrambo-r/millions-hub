@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { StageBadge, StatusBadge } from './StageBadge'
@@ -58,6 +58,17 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
   const [editError, setEditError] = useState('')
   const [editSuccess, setEditSuccess] = useState(false)
 
+  // Resume upload
+  const [resumeFile, setResumeFile] = useState(null)
+  const resumeFileRef = useRef(null)
+
+  // Inline interview date/time
+  const [editInterviewDate, setEditInterviewDate] = useState('')
+  const [editInterviewTime, setEditInterviewTime] = useState('')
+  const [interviewSaving, setInterviewSaving] = useState(false)
+  const [interviewError, setInterviewError] = useState('')
+  const [interviewSuccess, setInterviewSuccess] = useState(false)
+
   const isOpen = !!candidate
 
   useEffect(() => {
@@ -80,6 +91,11 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
     setIsEditing(false)
     setEditError('')
     setEditSuccess(false)
+    setResumeFile(null)
+    setEditInterviewDate(candidate.interview_date ?? '')
+    setEditInterviewTime(candidate.interview_time ?? '')
+    setInterviewError('')
+    setInterviewSuccess(false)
 
     setHistoryLoading(true)
     supabase
@@ -159,7 +175,16 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
 
   // ── General edit mode ──────────────────────────────────────────────────────
 
+  function extractStoragePath(url) {
+    if (!url) return null
+    if (!url.startsWith('http')) return url
+    const marker = '/storage/v1/object/public/resumes/'
+    const idx = url.indexOf(marker)
+    return idx === -1 ? null : url.slice(idx + marker.length)
+  }
+
   function handleEditStart() {
+    setResumeFile(null)
     setEditFields({
       name:               candidate.name ?? '',
       email:              candidate.email ?? '',
@@ -196,9 +221,58 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
     setEditError('')
   }
 
+  async function handleInterviewSave() {
+    setInterviewSaving(true)
+    setInterviewError('')
+
+    const { error } = await supabase
+      .from('candidates')
+      .update({
+        interview_date:  editInterviewDate || null,
+        interview_time:  editInterviewTime || null,
+        last_updated_at: new Date().toISOString(),
+      })
+      .eq('id', candidate.id)
+
+    setInterviewSaving(false)
+
+    if (error) {
+      setInterviewError(error.message)
+      return
+    }
+
+    setInterviewSuccess(true)
+    setTimeout(() => setInterviewSuccess(false), 3000)
+    onUpdate?.({ interview_date: editInterviewDate || null, interview_time: editInterviewTime || null })
+  }
+
   async function handleEditSave() {
     setEditSaving(true)
     setEditError('')
+
+    // Handle resume upload before saving other fields
+    let newResumeUrl = undefined
+    if (resumeFile) {
+      const fileExt = resumeFile.name.split('.').pop()
+      const filePath = `${candidate.id}/${Date.now()}.${fileExt}`
+      const { error: uploadError } = await supabase.storage
+        .from('resumes')
+        .upload(filePath, resumeFile, { upsert: true })
+
+      if (uploadError) {
+        setEditError(`Resume upload failed: ${uploadError.message}`)
+        setEditSaving(false)
+        return
+      }
+
+      if (candidate.resume_url) {
+        const oldPath = extractStoragePath(candidate.resume_url)
+        if (oldPath) await supabase.storage.from('resumes').remove([oldPath])
+      }
+
+      const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
+      newResumeUrl = urlData.publicUrl
+    }
 
     const payload = {
       name:               editFields.name.trim() || null,
@@ -222,6 +296,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
       interview_time:     editFields.interview_time || null,
       comments:           editFields.comments.trim() || null,
       last_updated_at:    new Date().toISOString(),
+      ...(newResumeUrl !== undefined && { resume_url: newResumeUrl }),
     }
 
     console.log('[CandidatePanel] update payload:', payload)
@@ -420,6 +495,36 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
                     className={`${fldCls} h-auto py-2 resize-none`}
                   />
                 </EditField>
+                <EditField label="Resume" colSpan2>
+                  {candidate.resume_url && (
+                    <p className="text-xs text-[#666] mb-1.5">
+                      Current: <span className="font-medium">{candidate.resume_url.split('/').pop()}</span>
+                    </p>
+                  )}
+                  <input
+                    ref={resumeFileRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    className="hidden"
+                    onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
+                  />
+                  <div className="flex items-center gap-3 h-9">
+                    <button
+                      type="button"
+                      onClick={() => resumeFileRef.current?.click()}
+                      className="h-9 px-3 rounded-lg border border-[#F0F0F4] flex items-center gap-2 text-sm text-[#666] hover:border-[#5E6AD2] hover:text-[#5E6AD2] transition shrink-0"
+                    >
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                        <path d="M3 12V4a1 1 0 011-1h5l3 3v6a1 1 0 01-1 1H4a1 1 0 01-1-1z" />
+                        <path d="M9 3v3h3M6 9h4M8 7v4" strokeLinecap="round" />
+                      </svg>
+                      {candidate.resume_url ? 'Replace resume' : 'Choose file'}
+                    </button>
+                    <span className="text-sm text-[#999] truncate">
+                      {resumeFile ? resumeFile.name : '.pdf, .doc, .docx'}
+                    </span>
+                  </div>
+                </EditField>
               </div>
             </div>
           ) : (
@@ -568,6 +673,57 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
                     style={{ backgroundColor: '#5E6AD2' }}
                   >
                     {saving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+
+              <hr className="border-[#F0F0F4]" />
+
+              <div className="pb-2">
+                <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">
+                  Update interview
+                </h3>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
+                      Interview date
+                    </label>
+                    <input
+                      type="date"
+                      value={editInterviewDate}
+                      onChange={(e) => { setEditInterviewDate(e.target.value); setInterviewError('') }}
+                      className={fldCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
+                      Interview time
+                    </label>
+                    <input
+                      type="time"
+                      value={editInterviewTime}
+                      onChange={(e) => { setEditInterviewTime(e.target.value); setInterviewError('') }}
+                      className={fldCls}
+                    />
+                  </div>
+                </div>
+
+                {interviewError && (
+                  <p className="text-xs text-[#D93025] mt-2">{interviewError}</p>
+                )}
+                {interviewSuccess && (
+                  <p className="text-xs text-green-600 mt-2">Interview details saved.</p>
+                )}
+
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={handleInterviewSave}
+                    disabled={interviewSaving}
+                    className="h-9 px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: '#5E6AD2' }}
+                  >
+                    {interviewSaving ? 'Saving…' : 'Save'}
                   </button>
                 </div>
               </div>
