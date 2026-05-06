@@ -66,14 +66,14 @@ export default function AddClientForm({ onClose, onAdded }) {
     setAiError('')
 
     try {
-      const res = await fetch('https://api.deepseek.com/chat/completions', {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_DEEPSEEK_API_KEY}`
+          'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'deepseek-chat',
+          model: 'llama-3.3-70b-versatile',
           messages: [
             {
               role: 'system',
@@ -95,12 +95,12 @@ export default function AddClientForm({ onClose, onAdded }) {
       })
 
       if (!res.ok) {
-        throw new Error(`DeepSeek API error: ${res.status}`)
+        throw new Error(`Groq API error: ${res.status}`)
       }
 
       const data = await res.json()
       const text = data?.choices?.[0]?.message?.content
-      if (!text) throw new Error('Empty response from DeepSeek')
+      if (!text) throw new Error('Empty response from Groq')
 
       const parsed = JSON.parse(text)
       setForm((prev) => ({
