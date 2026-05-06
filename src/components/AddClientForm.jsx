@@ -66,7 +66,7 @@ export default function AddClientForm({ onClose, onAdded }) {
     setAiError('')
 
     try {
-const res = await fetch(
+      const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
         {
           method: 'POST',
@@ -96,7 +96,8 @@ Company name: ${companyName}`,
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
       if (!text) throw new Error('Empty response from Gemini')
 
-      const parsed = JSON.parse(text)
+      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
+      const parsed = JSON.parse(cleaned)
       setForm((prev) => ({
         ...prev,
         industry:    parsed.industry    ?? prev.industry,
