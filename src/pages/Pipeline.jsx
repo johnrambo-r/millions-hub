@@ -4,6 +4,7 @@ import { StageBadge, StatusBadge } from '../components/pipeline/StageBadge'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
 import { useProfile } from '../hooks/useProfile'
 import { usePipelineData } from '../hooks/usePipelineData'
+import { STAGE_STATUS_MAP } from '../lib/candidateConstants'
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -130,6 +131,13 @@ export default function Pipeline() {
     () => [...new Set(rows.map((r) => r.stage).filter(Boolean))].sort(),
     [rows]
   )
+
+  const statusOptions = useMemo(() => {
+    if (!stageFilter) {
+      return [...new Set(Object.values(STAGE_STATUS_MAP).flat())]
+    }
+    return STAGE_STATUS_MAP[stageFilter] ?? []
+  }, [stageFilter])
   const clients = useMemo(() => {
     const seen = new Map()
     rows.forEach((r) => { if (r.clients?.id) seen.set(r.clients.id, r.clients) })
@@ -180,19 +188,16 @@ export default function Pipeline() {
             />
           </div>
 
-          <SelectFilter value={stageFilter} onChange={setStageFilter} placeholder="All stages">
+          <SelectFilter
+            value={stageFilter}
+            onChange={(v) => { setStageFilter(v); setStatusFilter('') }}
+            placeholder="All stages"
+          >
             {stages.map((s) => <option key={s} value={s}>{s}</option>)}
           </SelectFilter>
 
           <SelectFilter value={statusFilter} onChange={setStatusFilter} placeholder="All statuses">
-            <option value="Screening">Screening</option>
-            <option value="Shortlisted">Shortlisted</option>
-            <option value="Submitted to Client">Submitted to Client</option>
-            <option value="Client Review">Client Review</option>
-            <option value="Interview Scheduled">Interview Scheduled</option>
-            <option value="Selected">Selected</option>
-            <option value="Rejected">Rejected</option>
-            <option value="On Hold">On Hold</option>
+            {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
           </SelectFilter>
 
           <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
