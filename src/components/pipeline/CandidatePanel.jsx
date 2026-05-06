@@ -2,13 +2,25 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { StageBadge, StatusBadge } from './StageBadge'
-import { STAGES, STAGE_STATUS_MAP } from '../../lib/candidateConstants'
+import {
+  STAGES, STAGE_STATUS_MAP,
+  QUALIFICATIONS, PASSING_YEARS, NOTICE_PERIODS,
+} from '../../lib/candidateConstants'
 
 function Field({ label, children, colSpan2 = false }) {
   return (
     <div className={colSpan2 ? 'col-span-2' : ''}>
       <dt className="text-xs font-medium text-[#999] uppercase tracking-wide mb-0.5">{label}</dt>
       <dd className="text-sm text-[#0F0F12]">{children || '—'}</dd>
+    </div>
+  )
+}
+
+function EditField({ label, children, colSpan2 = false }) {
+  return (
+    <div className={colSpan2 ? 'col-span-2' : ''}>
+      <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">{label}</label>
+      {children}
     </div>
   )
 }
@@ -26,39 +38,53 @@ function CloseIcon() {
   )
 }
 
-const selectCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
+const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
 export default function CandidatePanel({ candidate, onClose, onUpdate }) {
   const { session } = useAuth()
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [resumeUrl, setResumeUrl] = useState(null)
 
+  // Stage / status update
   const [editStage, setEditStage] = useState('')
   const [editStatus, setEditStatus] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+
+  // General edit mode
+  const [isEditing, setIsEditing] = useState(false)
+  const [editFields, setEditFields] = useState({})
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [editSuccess, setEditSuccess] = useState(false)
 
   const isOpen = !!candidate
 
   useEffect(() => {
     if (!candidate) {
       setHistory([])
-      setResumeUrl(null)
       setEditStage('')
       setEditStatus('')
       setSaveError('')
+      setIsEditing(false)
+      setEditError('')
+      setEditSuccess(false)
       return
     }
+
+    console.log('[CandidatePanel] resume_url:', candidate.resume_url)
 
     setEditStage(candidate.stage ?? '')
     setEditStatus(candidate.status ?? '')
     setSaveError('')
+    setIsEditing(false)
+    setEditError('')
+    setEditSuccess(false)
 
     setHistoryLoading(true)
     supabase
       .from('status_history')
-      .select('id, stage, status, note, changed_at, profiles(name)')
+      .select('id, stage, status, notes, changed_at, profiles(name)')
       .eq('candidate_id', candidate.id)
       .order('changed_at', { ascending: true })
       .then(({ data, error }) => {
@@ -66,18 +92,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
         setHistory(data ?? [])
         setHistoryLoading(false)
       })
-
-    if (candidate.resume_url) {
-      supabase.storage
-        .from('resumes')
-        .createSignedUrl(candidate.resume_url, 3600)
-        .then(({ data, error }) => {
-          if (error) console.warn('[CandidatePanel] resume signed URL:', error.message)
-          else setResumeUrl(data?.signedUrl ?? null)
-        })
-    } else {
-      setResumeUrl(null)
-    }
   }, [candidate?.id])
 
   useEffect(() => {
@@ -86,6 +100,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [isOpen, onClose])
+
+  // ── Stage / status update ──────────────────────────────────────────────────
 
   function handleEditStageChange(e) {
     setEditStage(e.target.value)
@@ -108,7 +124,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
 
     const { error: updateError } = await supabase
       .from('candidates')
-      .update({ stage: editStage, status: editStatus, status_changed_at: now })
+      .update({ stage: editStage, status: editStatus })
       .eq('id', candidate.id)
 
     if (updateError) {
@@ -125,19 +141,117 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
       changed_at:   now,
     })
 
-    if (histError) console.error('[CandidatePanel] status_history insert:', histError.message)
+    if (histError) {
+      console.error('[CandidatePanel] status_history insert:', histError.message)
+      setSaveError(`Stage saved, but history not recorded: ${histError.message}`)
+    }
 
     const { data: newHistory } = await supabase
       .from('status_history')
-      .select('id, stage, status, note, changed_at, profiles(name)')
+      .select('id, stage, status, notes, changed_at, profiles(name)')
       .eq('candidate_id', candidate.id)
       .order('changed_at', { ascending: true })
 
     setHistory(newHistory ?? [])
     setSaving(false)
-
     onUpdate?.({ stage: editStage, status: editStatus, status_changed_at: now })
   }
+
+  // ── General edit mode ──────────────────────────────────────────────────────
+
+  function handleEditStart() {
+    setEditFields({
+      name:               candidate.name ?? '',
+      email:              candidate.email ?? '',
+      phone:              candidate.phone ?? '',
+      alt_contact:        candidate.alt_contact ?? '',
+      current_location:   candidate.current_location ?? '',
+      preferred_location: candidate.preferred_location ?? '',
+      education:          candidate.education ?? '',
+      year_of_passing:    candidate.year_of_passing?.toString() ?? '',
+      current_company:    candidate.current_company ?? '',
+      skill_role:         candidate.skill_role ?? '',
+      total_exp:          candidate.total_exp?.toString() ?? '',
+      relevant_exp:       candidate.relevant_exp?.toString() ?? '',
+      emp_mode:           candidate.emp_mode ?? '',
+      payroll_company:    candidate.payroll_company ?? '',
+      notice_period:      candidate.notice_period ?? '',
+      current_ctc:        candidate.current_ctc?.toString() ?? '',
+      expected_ctc:       candidate.expected_ctc?.toString() ?? '',
+      interview_date:     candidate.interview_date ?? '',
+      interview_time:     candidate.interview_time ?? '',
+      comments:           candidate.comments ?? '',
+    })
+    setEditError('')
+    setEditSuccess(false)
+    setIsEditing(true)
+  }
+
+  function setEditField(key, value) {
+    setEditFields((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function handleEditCancel() {
+    setIsEditing(false)
+    setEditError('')
+  }
+
+  async function handleEditSave() {
+    setEditSaving(true)
+    setEditError('')
+
+    const payload = {
+      name:               editFields.name.trim() || null,
+      email:              editFields.email.trim().toLowerCase() || null,
+      phone:              editFields.phone.trim() || null,
+      alt_contact:        editFields.alt_contact.trim() || null,
+      current_location:   editFields.current_location.trim() || null,
+      preferred_location: editFields.preferred_location.trim() || null,
+      education:          editFields.education || null,
+      year_of_passing:    editFields.year_of_passing ? parseInt(editFields.year_of_passing, 10) : null,
+      current_company:    editFields.current_company.trim() || null,
+      skill_role:         editFields.skill_role.trim() || null,
+      total_exp:          editFields.total_exp !== '' ? parseFloat(editFields.total_exp) : null,
+      relevant_exp:       editFields.relevant_exp !== '' ? parseFloat(editFields.relevant_exp) : null,
+      emp_mode:           editFields.emp_mode || null,
+      payroll_company:    editFields.payroll_company.trim() || null,
+      notice_period:      editFields.notice_period || null,
+      current_ctc:        editFields.current_ctc !== '' ? parseFloat(editFields.current_ctc) : null,
+      expected_ctc:       editFields.expected_ctc !== '' ? parseFloat(editFields.expected_ctc) : null,
+      interview_date:     editFields.interview_date || null,
+      interview_time:     editFields.interview_time || null,
+      comments:           editFields.comments.trim() || null,
+      last_updated_at:    new Date().toISOString(),
+    }
+
+    console.log('[CandidatePanel] update payload:', payload)
+
+    const { error } = await supabase
+      .from('candidates')
+      .update(payload)
+      .eq('id', candidate.id)
+
+    setEditSaving(false)
+
+    if (error) {
+      console.error('[CandidatePanel] update error:', error)
+      setEditError(error.message)
+      return
+    }
+
+    setIsEditing(false)
+    setEditSuccess(true)
+    setTimeout(() => setEditSuccess(false), 3000)
+    onUpdate?.(payload)
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const resumeUrl = candidate?.resume_url?.startsWith('http')
+    ? candidate.resume_url
+    : candidate?.resume_url
+      ? supabase.storage.from('resumes').getPublicUrl(candidate.resume_url).data.publicUrl
+      : null
 
   return (
     <>
@@ -163,17 +277,51 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
             )}
             <p className="text-sm text-[#666] mt-0.5 truncate">{candidate?.skill_role ?? '—'}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-[#999] hover:text-[#0F0F12] transition-colors shrink-0"
-            aria-label="Close"
-          >
-            <CloseIcon />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {!isEditing ? (
+              <button
+                onClick={handleEditStart}
+                className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:border-[#5E6AD2] hover:text-[#5E6AD2] transition"
+              >
+                Edit
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleEditCancel}
+                  className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEditSave}
+                  disabled={editSaving}
+                  className="h-8 px-4 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ backgroundColor: '#5E6AD2' }}
+                >
+                  {editSaving ? 'Saving…' : 'Save changes'}
+                </button>
+              </>
+            )}
+            <button
+              onClick={onClose}
+              className="text-[#999] hover:text-[#0F0F12] transition-colors"
+              aria-label="Close"
+            >
+              <CloseIcon />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+          {/* Success banner */}
+          {editSuccess && (
+            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+              Changes saved successfully.
+            </div>
+          )}
 
           {/* Stage / Status badges */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -181,46 +329,141 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
             <StatusBadge value={candidate?.status} />
           </div>
 
-          {/* Full detail grid */}
-          <dl className="grid grid-cols-2 gap-x-8 gap-y-5">
-            <Field label="Client">{candidate?.clients?.name}</Field>
-            <Field label="Recruiter">{candidate?.profiles?.name}</Field>
-            <Field label="Email">{candidate?.email}</Field>
-            <Field label="Phone">{candidate?.phone}</Field>
-            <Field label="Alt contact">{candidate?.alt_contact}</Field>
-            <Field label="Current location">{candidate?.current_location}</Field>
-            <Field label="Preferred location">{candidate?.preferred_location}</Field>
-            <Field label="Education">{candidate?.education}</Field>
-            <Field label="Year of passing">{candidate?.year_of_passing}</Field>
-            <Field label="Current company">{candidate?.current_company}</Field>
-            <Field label="Total exp">
-              {candidate?.total_exp != null ? `${candidate.total_exp} yrs` : null}
-            </Field>
-            <Field label="Relevant exp">
-              {candidate?.relevant_exp != null ? `${candidate.relevant_exp} yrs` : null}
-            </Field>
-            <Field label="Emp mode">{candidate?.emp_mode}</Field>
-            {candidate?.payroll_company ? (
-              <Field label="Payroll company">{candidate.payroll_company}</Field>
-            ) : (
-              <div />
-            )}
-            <Field label="Notice period">{candidate?.notice_period}</Field>
-            <Field label="Current CTC">
-              {candidate?.current_ctc != null ? `${candidate.current_ctc} LPA` : null}
-            </Field>
-            <Field label="Expected CTC">
-              {candidate?.expected_ctc != null ? `${candidate.expected_ctc} LPA` : null}
-            </Field>
-            <Field label="Interview date">{formatDate(candidate?.interview_date)}</Field>
-            <Field label="Interview time">{candidate?.interview_time}</Field>
-            <Field label="Last updated">{formatDate(candidate?.status_changed_at)}</Field>
-            {candidate?.comments && (
-              <Field label="Comments" colSpan2>{candidate.comments}</Field>
-            )}
-          </dl>
+          {isEditing ? (
+            /* ── Edit form ────────────────────────────────────────────── */
+            <div>
+              {editError && (
+                <p className="text-xs text-[#D93025] mb-4">{editError}</p>
+              )}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+                <EditField label="Full name">
+                  <input type="text" value={editFields.name || ''} onChange={(e) => setEditField('name', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Email">
+                  <input type="email" value={editFields.email || ''} onChange={(e) => setEditField('email', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Phone">
+                  <input type="tel" value={editFields.phone || ''} onChange={(e) => setEditField('phone', e.target.value)} className={fldCls} maxLength={10} />
+                </EditField>
+                <EditField label="Alt contact">
+                  <input type="tel" value={editFields.alt_contact || ''} onChange={(e) => setEditField('alt_contact', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Current location">
+                  <input type="text" value={editFields.current_location || ''} onChange={(e) => setEditField('current_location', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Preferred location">
+                  <input type="text" value={editFields.preferred_location || ''} onChange={(e) => setEditField('preferred_location', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Education">
+                  <select value={editFields.education || ''} onChange={(e) => setEditField('education', e.target.value)} className={fldCls}>
+                    <option value="">Select</option>
+                    {QUALIFICATIONS.map((q) => <option key={q} value={q}>{q}</option>)}
+                  </select>
+                </EditField>
+                <EditField label="Year of passing">
+                  <select value={editFields.year_of_passing || ''} onChange={(e) => setEditField('year_of_passing', e.target.value)} className={fldCls}>
+                    <option value="">Select</option>
+                    {PASSING_YEARS.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+                  </select>
+                </EditField>
+                <EditField label="Current company">
+                  <input type="text" value={editFields.current_company || ''} onChange={(e) => setEditField('current_company', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Skill / Role">
+                  <input type="text" value={editFields.skill_role || ''} onChange={(e) => setEditField('skill_role', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Total exp (yrs)">
+                  <input type="number" min={0} step={0.5} value={editFields.total_exp ?? ''} onChange={(e) => setEditField('total_exp', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Relevant exp (yrs)">
+                  <input type="number" min={0} step={0.5} value={editFields.relevant_exp ?? ''} onChange={(e) => setEditField('relevant_exp', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Emp mode">
+                  <select value={editFields.emp_mode || ''} onChange={(e) => setEditField('emp_mode', e.target.value)} className={fldCls}>
+                    <option value="">Select</option>
+                    <option value="Permanent">Permanent</option>
+                    <option value="Contract">Contract</option>
+                  </select>
+                </EditField>
+                <EditField label="Payroll company">
+                  <input
+                    type="text"
+                    value={editFields.payroll_company || ''}
+                    onChange={(e) => setEditField('payroll_company', e.target.value)}
+                    disabled={editFields.emp_mode !== 'Contract'}
+                    className={`${fldCls} ${editFields.emp_mode !== 'Contract' ? 'opacity-40 cursor-not-allowed bg-[#FAFAFA]' : ''}`}
+                  />
+                </EditField>
+                <EditField label="Notice period">
+                  <select value={editFields.notice_period || ''} onChange={(e) => setEditField('notice_period', e.target.value)} className={fldCls}>
+                    <option value="">Select</option>
+                    {NOTICE_PERIODS.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </EditField>
+                <EditField label="Current CTC (LPA)">
+                  <input type="number" min={0} step={0.5} value={editFields.current_ctc ?? ''} onChange={(e) => setEditField('current_ctc', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Expected CTC (LPA)">
+                  <input type="number" min={0} step={0.5} value={editFields.expected_ctc ?? ''} onChange={(e) => setEditField('expected_ctc', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Interview date">
+                  <input type="date" value={editFields.interview_date || ''} onChange={(e) => setEditField('interview_date', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Interview time">
+                  <input type="time" value={editFields.interview_time || ''} onChange={(e) => setEditField('interview_time', e.target.value)} className={fldCls} />
+                </EditField>
+                <EditField label="Comments" colSpan2>
+                  <textarea
+                    value={editFields.comments || ''}
+                    onChange={(e) => setEditField('comments', e.target.value)}
+                    rows={3}
+                    className={`${fldCls} h-auto py-2 resize-none`}
+                  />
+                </EditField>
+              </div>
+            </div>
+          ) : (
+            /* ── Read-only detail grid ────────────────────────────────── */
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-5">
+              <Field label="Client">{candidate?.clients?.name}</Field>
+              <Field label="Recruiter">{candidate?.profiles?.name}</Field>
+              <Field label="Email">{candidate?.email}</Field>
+              <Field label="Phone">{candidate?.phone}</Field>
+              <Field label="Alt contact">{candidate?.alt_contact}</Field>
+              <Field label="Current location">{candidate?.current_location}</Field>
+              <Field label="Preferred location">{candidate?.preferred_location}</Field>
+              <Field label="Education">{candidate?.education}</Field>
+              <Field label="Year of passing">{candidate?.year_of_passing}</Field>
+              <Field label="Current company">{candidate?.current_company}</Field>
+              <Field label="Total exp">
+                {candidate?.total_exp != null ? `${candidate.total_exp} yrs` : null}
+              </Field>
+              <Field label="Relevant exp">
+                {candidate?.relevant_exp != null ? `${candidate.relevant_exp} yrs` : null}
+              </Field>
+              <Field label="Emp mode">{candidate?.emp_mode}</Field>
+              {candidate?.payroll_company ? (
+                <Field label="Payroll company">{candidate.payroll_company}</Field>
+              ) : (
+                <div />
+              )}
+              <Field label="Notice period">{candidate?.notice_period}</Field>
+              <Field label="Current CTC">
+                {candidate?.current_ctc != null ? `${candidate.current_ctc} LPA` : null}
+              </Field>
+              <Field label="Expected CTC">
+                {candidate?.expected_ctc != null ? `${candidate.expected_ctc} LPA` : null}
+              </Field>
+              <Field label="Interview date">{formatDate(candidate?.interview_date)}</Field>
+              <Field label="Interview time">{candidate?.interview_time}</Field>
+              <Field label="Last updated">{formatDate(candidate?.status_changed_at)}</Field>
+              {candidate?.comments && (
+                <Field label="Comments" colSpan2>{candidate.comments}</Field>
+              )}
+            </dl>
+          )}
 
-          {/* Resume link */}
+          {/* Resume link — shown whenever a valid resume URL can be resolved */}
           {resumeUrl && (
             <div>
               <a
@@ -262,8 +505,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
                       </div>
                       <span className="text-xs text-[#999] shrink-0 pt-0.5">{formatDate(h.changed_at)}</span>
                     </div>
-                    {h.note && (
-                      <p className="text-xs text-[#666] mt-1.5 leading-relaxed">{h.note}</p>
+                    {h.notes && (
+                      <p className="text-xs text-[#666] mt-1.5 leading-relaxed">{h.notes}</p>
                     )}
                     {h.profiles?.name && (
                       <p className="text-xs text-[#999] mt-1">by {h.profiles.name}</p>
@@ -274,59 +517,62 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
             )}
           </div>
 
-          <hr className="border-[#F0F0F4]" />
+          {/* Update stage / status — hidden during general edit */}
+          {!isEditing && (
+            <>
+              <hr className="border-[#F0F0F4]" />
+              <div className="pb-2">
+                <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">
+                  Update stage / status
+                </h3>
 
-          {/* Update stage / status */}
-          <div className="pb-2">
-            <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">
-              Update stage / status
-            </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
+                      Stage
+                    </label>
+                    <select
+                      value={editStage}
+                      onChange={handleEditStageChange}
+                      className={fldCls}
+                    >
+                      <option value="">Select stage</option>
+                      {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
+                      Status
+                    </label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => { setEditStatus(e.target.value); setSaveError('') }}
+                      disabled={!editStage}
+                      className={`${fldCls} ${!editStage ? 'text-[#999] bg-[#FAFAFA] cursor-not-allowed' : ''}`}
+                    >
+                      <option value="">{editStage ? 'Select status' : 'Select stage first'}</option>
+                      {editStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
-                  Stage
-                </label>
-                <select
-                  value={editStage}
-                  onChange={handleEditStageChange}
-                  className={selectCls}
-                >
-                  <option value="">Select stage</option>
-                  {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
+                {saveError && (
+                  <p className="text-xs text-[#D93025] mt-2">{saveError}</p>
+                )}
+
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={handleSave}
+                    disabled={saving || !editStage || !editStatus}
+                    className="h-9 px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: '#5E6AD2' }}
+                  >
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
-                  Status
-                </label>
-                <select
-                  value={editStatus}
-                  onChange={(e) => { setEditStatus(e.target.value); setSaveError('') }}
-                  disabled={!editStage}
-                  className={`${selectCls} ${!editStage ? 'text-[#999] bg-[#FAFAFA] cursor-not-allowed' : ''}`}
-                >
-                  <option value="">{editStage ? 'Select status' : 'Select stage first'}</option>
-                  {editStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {saveError && (
-              <p className="text-xs text-[#D93025] mt-2">{saveError}</p>
-            )}
-
-            <div className="mt-3 flex justify-end">
-              <button
-                onClick={handleSave}
-                disabled={saving || !editStage || !editStatus}
-                className="h-9 px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ backgroundColor: '#5E6AD2' }}
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </div>
     </>

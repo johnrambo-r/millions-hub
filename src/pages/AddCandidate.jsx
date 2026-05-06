@@ -184,22 +184,25 @@ export default function AddCandidate() {
       if (uploadError) {
         console.warn('[AddCandidate] resume upload failed:', uploadError.message)
       } else {
+        const filePath = `${inserted.id}/${resumeFile.name}`
+        const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
         await supabase
           .from('candidates')
-          .update({ resume_url: `${inserted.id}/${resumeFile.name}` })
+          .update({ resume_url: urlData.publicUrl })
           .eq('id', inserted.id)
       }
     }
 
     // First status history row
-    await supabase.from('status_history').insert({
+    const { error: histError } = await supabase.from('status_history').insert({
       candidate_id: inserted.id,
       stage:        form.stage,
       status:       form.status,
-      note:         form.comments.trim() || null,
+      notes:        form.comments.trim() || null,
       changed_by:   session.user.id,
       changed_at:   now,
     })
+    if (histError) console.error('[AddCandidate] status_history insert:', histError.message)
 
     // Reset
     const addedId = candidateId

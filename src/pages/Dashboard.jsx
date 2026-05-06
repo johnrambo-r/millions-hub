@@ -9,7 +9,7 @@ import { useDashboardData } from '../hooks/useDashboardData'
 
 export default function Dashboard() {
   const profile = useProfile()
-  const { data, loading } = useDashboardData(profile)
+  const { data, loading, refresh } = useDashboardData(profile)
   const [selectedCandidate, setSelectedCandidate] = useState(null)
 
   const interviews = data?.interviewsToday ?? []
@@ -115,6 +115,12 @@ export default function Dashboard() {
       <CandidatePanel
         candidate={selectedCandidate}
         onClose={() => setSelectedCandidate(null)}
+        onUpdate={(patch) => {
+          if (patch && selectedCandidate) {
+            setSelectedCandidate((prev) => ({ ...prev, ...patch }))
+          }
+          refresh()
+        }}
       />
     </AppShell>
   )

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+
 
 const DEAD_STATUSES = [
   'Internal Reject',
@@ -34,6 +35,7 @@ export function useDashboardData(profile) {
   const { session } = useAuth()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const fetchRef = useRef(null)
 
   useEffect(() => {
     if (!profile) {
@@ -43,14 +45,14 @@ export function useDashboardData(profile) {
 
     console.log('[useDashboardData] fetching — profile:', profile)
 
-    async function fetchData() {
-      setLoading(true)
+    async function fetchData({ background = false } = {}) {
+      if (!background) setLoading(true)
 
       // Select only columns that actually exist; omit stage_updated_at in favour
       // of status_changed_at (the real column name confirmed by the user).
       let query = supabase
         .from('candidates')
-        .select('id, name, skill_role, stage, status, interview_date, status_changed_at, total_exp, relevant_exp, recruiter_id, clients(name), profiles(name)')
+        .select('*, clients(name), profiles(name)')
 
       // Recruiters see only their own candidates; managers see all.
       if (profile.role === 'recruiter') {
@@ -115,8 +117,16 @@ export function useDashboardData(profile) {
       setLoading(false)
     }
 
+    fetchRef.current = fetchData
     fetchData()
+
+    const channel = supabase
+      .channel('dashboard-candidates-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidates' }, () => fetchRef.current?.({ background: true }))
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [profile, session])
 
-  return { data, loading }
+  return { data, loading, refresh: () => fetchRef.current?.({ background: true }) }
 }
