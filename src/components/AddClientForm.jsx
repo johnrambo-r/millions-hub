@@ -66,38 +66,43 @@ export default function AddClientForm({ onClose, onAdded }) {
     setAiError('')
 
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `You are a business research assistant. Given the company name, return a JSON object with these fields:
-- industry (e.g. Banking, IT Services, Healthcare, Manufacturing)
-- client_type (one of: GCC, Product Startup, IT Services, Consulting)
-- location (city, country — HQ)
-- website (full URL)
-- about (2-3 sentence company description)
-Only return valid JSON, no markdown, no explanation.
-Company name: ${companyName}`,
-              }],
-            }],
-          }),
-        }
-      )
+      const res = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_DEEPSEEK_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a business research assistant. Return only valid JSON, no markdown, no explanation.'
+            },
+            {
+              role: 'user',
+              content: `Given the company name, return a JSON object with these fields:
+        - industry (e.g. Banking, IT Services, Healthcare, Manufacturing)
+        - client_type (one of: GCC, Product Startup, IT Services, Consulting)
+        - location (city, country — HQ)
+        - website (full URL)
+        - about (2-3 sentence company description)
+        Company name: ${companyName}`
+            }
+          ],
+          max_tokens: 500
+        })
+      })
 
       if (!res.ok) {
-        throw new Error(`Gemini API error: ${res.status}`)
+        throw new Error(`DeepSeek API error: ${res.status}`)
       }
 
       const data = await res.json()
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
-      if (!text) throw new Error('Empty response from Gemini')
+      const text = data?.choices?.[0]?.message?.content
+      if (!text) throw new Error('Empty response from DeepSeek')
 
-      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
-      const parsed = JSON.parse(cleaned)
+      const parsed = JSON.parse(text)
       setForm((prev) => ({
         ...prev,
         industry:    parsed.industry    ?? prev.industry,
