@@ -6,6 +6,7 @@ import {
   STAGES, STAGE_STATUS_MAP,
   QUALIFICATIONS, PASSING_YEARS, NOTICE_PERIODS,
 } from '../../lib/candidateConstants'
+import UnsavedChangesModal from '../UnsavedChangesModal'
 
 function Field({ label, children, colSpan2 = false }) {
   return (
@@ -40,7 +41,7 @@ function CloseIcon() {
 
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
-export default function CandidatePanel({ candidate, onClose, onUpdate }) {
+export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSelect, onPendingResolved, onPendingCancelled }) {
   const { session } = useAuth()
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -57,10 +58,16 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
   const [editSuccess, setEditSuccess] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
+
+  // Unsaved changes dialog
+  const [dialog, setDialog] = useState(null)
+  const [dialogSaving, setDialogSaving] = useState(false)
 
   // Resume upload
   const [resumeFile, setResumeFile] = useState(null)
   const resumeFileRef = useRef(null)
+  const originalFieldsRef = useRef({})
 
   // Inline interview date/time
   const [editInterviewDate, setEditInterviewDate] = useState('')
@@ -72,6 +79,23 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
   const isOpen = !!candidate
 
   useEffect(() => {
+    if (isDirty) {
+      window.onbeforeunload = () => true
+    } else {
+      window.onbeforeunload = null
+    }
+    return () => { window.onbeforeunload = null }
+  }, [isDirty])
+
+  // Compute isDirty by comparing current editFields against the values loaded when edit started
+  useEffect(() => {
+    if (!isEditing) return
+    const orig = originalFieldsRef.current
+    const dirty = !!resumeFile || Object.keys(editFields).some((k) => editFields[k] !== orig[k])
+    setIsDirty(dirty)
+  }, [editFields, resumeFile, isEditing])
+
+  useEffect(() => {
     if (!candidate) {
       setHistory([])
       setEditStage('')
@@ -80,6 +104,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
       setIsEditing(false)
       setEditError('')
       setEditSuccess(false)
+      setIsDirty(false)
+      setDialog(null)
       return
     }
 
@@ -92,6 +118,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
     setEditError('')
     setEditSuccess(false)
     setResumeFile(null)
+    setIsDirty(false)
     setEditInterviewDate(candidate.interview_date ?? '')
     setEditInterviewTime(candidate.interview_time ?? '')
     setInterviewError('')
@@ -112,10 +139,74 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
 
   useEffect(() => {
     if (!isOpen) return
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    const handler = (e) => {
+      if (e.key === 'Escape') handleRequestClose()
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [isOpen, onClose])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isEditing, isDirty])
+
+  // Handle pending candidate switch from Pipeline
+  useEffect(() => {
+    if (!pendingSelect) return
+    if (!isEditing || !isDirty) {
+      onPendingResolved?.(pendingSelect)
+      return
+    }
+    setDialog({
+      message: 'Do you want to save your changes before switching candidates?',
+      onSave: async () => {
+        setDialogSaving(true)
+        const ok = await performSave()
+        setDialogSaving(false)
+        setDialog(null)
+        if (ok) onPendingResolved?.(pendingSelect)
+        else onPendingCancelled?.()
+      },
+      onDiscard: () => {
+        resetEditState()
+        setDialog(null)
+        onPendingResolved?.(pendingSelect)
+      },
+      onCancel: () => {
+        setDialog(null)
+        onPendingCancelled?.()
+      },
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSelect])
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function resetEditState() {
+    setIsEditing(false)
+    setEditError('')
+    setIsDirty(false)
+  }
+
+  function handleRequestClose() {
+    if (isDirty) {
+      setDialog({
+        message: 'Do you want to save your changes before closing?',
+        onSave: async () => {
+          setDialogSaving(true)
+          const ok = await performSave()
+          setDialogSaving(false)
+          setDialog(null)
+          if (ok) onClose()
+        },
+        onDiscard: () => {
+          resetEditState()
+          setDialog(null)
+          onClose()
+        },
+        onCancel: () => setDialog(null),
+      })
+    } else {
+      onClose()
+    }
+  }
 
   // ── Stage / status update ──────────────────────────────────────────────────
 
@@ -185,7 +276,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
 
   function handleEditStart() {
     setResumeFile(null)
-    setEditFields({
+    const fields = {
       name:               candidate.name ?? '',
       email:              candidate.email ?? '',
       phone:              candidate.phone ?? '',
@@ -206,9 +297,12 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
       interview_date:     candidate.interview_date ?? '',
       interview_time:     candidate.interview_time ?? '',
       comments:           candidate.comments ?? '',
-    })
+    }
+    originalFieldsRef.current = { ...fields }
+    setEditFields(fields)
     setEditError('')
     setEditSuccess(false)
+    setIsDirty(false)
     setIsEditing(true)
   }
 
@@ -217,8 +311,25 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
   }
 
   function handleEditCancel() {
-    setIsEditing(false)
-    setEditError('')
+    if (isDirty) {
+      setDialog({
+        message: 'Do you want to save your changes before cancelling?',
+        onSave: async () => {
+          setDialogSaving(true)
+          const ok = await performSave()
+          setDialogSaving(false)
+          if (ok) setDialog(null)
+          else setDialog(null)
+        },
+        onDiscard: () => {
+          resetEditState()
+          setDialog(null)
+        },
+        onCancel: () => setDialog(null),
+      })
+    } else {
+      resetEditState()
+    }
   }
 
   async function handleInterviewSave() {
@@ -246,11 +357,11 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
     onUpdate?.({ interview_date: editInterviewDate || null, interview_time: editInterviewTime || null })
   }
 
-  async function handleEditSave() {
+  // Core save logic — returns true on success, false on error
+  async function performSave() {
     setEditSaving(true)
     setEditError('')
 
-    // Handle resume upload before saving other fields
     let newResumeUrl = undefined
     if (resumeFile) {
       const fileExt = resumeFile.name.split('.').pop()
@@ -262,7 +373,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
       if (uploadError) {
         setEditError(`Resume upload failed: ${uploadError.message}`)
         setEditSaving(false)
-        return
+        return false
       }
 
       if (candidate.resume_url) {
@@ -311,13 +422,19 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
     if (error) {
       console.error('[CandidatePanel] update error:', error)
       setEditError(error.message)
-      return
+      return false
     }
 
     setIsEditing(false)
+    setIsDirty(false)
     setEditSuccess(true)
     setTimeout(() => setEditSuccess(false), 3000)
     onUpdate?.(payload)
+    return true
+  }
+
+  async function handleEditSave() {
+    await performSave()
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -333,7 +450,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
       {/* Backdrop */}
       <div
         className={`fixed inset-0 bg-black/20 z-40 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        onClick={onClose}
+        onClick={handleRequestClose}
       />
 
       {/* Slide-in panel */}
@@ -379,7 +496,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
               </>
             )}
             <button
-              onClick={onClose}
+              onClick={handleRequestClose}
               className="text-[#999] hover:text-[#0F0F12] transition-colors"
               aria-label="Close"
             >
@@ -613,7 +730,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
                     type="file"
                     accept=".pdf,.doc,.docx"
                     className="hidden"
-                    onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
+                    onChange={(e) => { setResumeFile(e.target.files?.[0] ?? null) }}
                   />
                   <div className="flex items-center gap-3 h-9">
                     <button
@@ -730,6 +847,17 @@ export default function CandidatePanel({ candidate, onClose, onUpdate }) {
           </div>
         </div>
       </div>
+
+      {/* Unsaved changes dialog */}
+      {dialog && (
+        <UnsavedChangesModal
+          message={dialog.message}
+          onSave={dialog.onSave}
+          onDiscard={dialog.onDiscard}
+          onCancel={dialog.onCancel}
+          saving={dialogSaving}
+        />
+      )}
     </>
   )
 }

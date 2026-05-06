@@ -125,6 +125,7 @@ export default function Pipeline() {
   const [clientFilter, setClientFilter] = useState('')
   const [recruiterFilter, setRecruiterFilter] = useState('')
   const [selectedCandidate, setSelectedCandidate] = useState(null)
+  const [pendingSelect, setPendingSelect] = useState(null)
 
   // Derive unique filter options from loaded data
   const stages = useMemo(
@@ -235,7 +236,17 @@ export default function Pipeline() {
 
         {/* Table */}
         <div className="flex-1 overflow-auto">
-          <PipelineTable rows={filtered} loading={loading} onSelect={setSelectedCandidate} />
+          <PipelineTable
+            rows={filtered}
+            loading={loading}
+            onSelect={(row) => {
+              if (!selectedCandidate) {
+                setSelectedCandidate(row)
+              } else if (selectedCandidate.id !== row.id) {
+                setPendingSelect(row)
+              }
+            }}
+          />
         </div>
       </div>
 
@@ -247,6 +258,12 @@ export default function Pipeline() {
           setSelectedCandidate((prev) => prev ? { ...prev, ...updated } : prev)
           setRefreshToken((t) => t + 1)
         }}
+        pendingSelect={pendingSelect}
+        onPendingResolved={(candidate) => {
+          setSelectedCandidate(candidate)
+          setPendingSelect(null)
+        }}
+        onPendingCancelled={() => setPendingSelect(null)}
       />
     </AppShell>
   )

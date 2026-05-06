@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import AppShell from '../components/layout/AppShell'
 import FormSection from '../components/add-candidate/FormSection'
 import FormField, { inputCls, inputReadOnly } from '../components/add-candidate/FormField'
@@ -90,6 +90,17 @@ export default function AddCandidate() {
   const fileInputRef = useRef(null)
   const [formError, setFormError] = useState('')
 
+  const isDirty = Object.keys(INITIAL).some((key) => form[key] !== INITIAL[key]) || !!resumeFile
+
+  useEffect(() => {
+    if (isDirty) {
+      window.onbeforeunload = () => true
+    } else {
+      window.onbeforeunload = null
+    }
+    return () => { window.onbeforeunload = null }
+  }, [isDirty])
+
   function setField(key, value) {
     setForm((p) => ({ ...p, [key]: value }))
     setErrors((p) => ({ ...p, [key]: undefined }))
@@ -113,7 +124,7 @@ export default function AddCandidate() {
       setTimeout(() => {
         document.querySelector('[data-field-error]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }, 50)
-      return
+      return { success: false, reason: 'validation' }
     }
 
     // Duplicate check
@@ -125,7 +136,7 @@ export default function AddCandidate() {
 
       if (dupes?.length > 0) {
         setDuplicates(dupes)
-        return
+        return { success: false, reason: 'duplicates' }
       }
     }
 
@@ -191,7 +202,7 @@ export default function AddCandidate() {
     if (insertError) {
       setFormError(insertError.message)
       setSubmitting(false)
-      return
+      return { success: false, reason: 'insert' }
     }
 
     // First status history row
@@ -216,6 +227,7 @@ export default function AddCandidate() {
 
     setToast(addedId)
     setTimeout(() => setToast(''), 4000)
+    return { success: true }
   }
 
   function handleSubmit(e) {
