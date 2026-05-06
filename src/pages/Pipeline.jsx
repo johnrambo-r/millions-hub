@@ -120,6 +120,7 @@ export default function Pipeline() {
 
   const [search, setSearch] = useState('')
   const [stageFilter, setStageFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const [clientFilter, setClientFilter] = useState('')
   const [recruiterFilter, setRecruiterFilter] = useState('')
   const [selectedCandidate, setSelectedCandidate] = useState(null)
@@ -146,11 +147,12 @@ export default function Pipeline() {
     return rows.filter((r) => {
       if (q && !r.name?.toLowerCase().includes(q) && !r.skill_role?.toLowerCase().includes(q)) return false
       if (stageFilter && r.stage !== stageFilter) return false
+      if (statusFilter && r.status !== statusFilter) return false
       if (clientFilter && r.clients?.id !== clientFilter) return false
       if (recruiterFilter && r.recruiter_id !== recruiterFilter) return false
       return true
     })
-  }, [rows, search, stageFilter, clientFilter, recruiterFilter])
+  }, [rows, search, stageFilter, statusFilter, clientFilter, recruiterFilter])
 
   const isManager = profile?.role !== 'recruiter'
 
@@ -182,6 +184,17 @@ export default function Pipeline() {
             {stages.map((s) => <option key={s} value={s}>{s}</option>)}
           </SelectFilter>
 
+          <SelectFilter value={statusFilter} onChange={setStatusFilter} placeholder="All statuses">
+            <option value="Screening">Screening</option>
+            <option value="Shortlisted">Shortlisted</option>
+            <option value="Submitted to Client">Submitted to Client</option>
+            <option value="Client Review">Client Review</option>
+            <option value="Interview Scheduled">Interview Scheduled</option>
+            <option value="Selected">Selected</option>
+            <option value="Rejected">Rejected</option>
+            <option value="On Hold">On Hold</option>
+          </SelectFilter>
+
           <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
             {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </SelectFilter>
@@ -193,9 +206,9 @@ export default function Pipeline() {
           )}
 
           {/* Active filter count + clear */}
-          {(search || stageFilter || clientFilter || recruiterFilter) && (
+          {(search || stageFilter || statusFilter || clientFilter || recruiterFilter) && (
             <button
-              onClick={() => { setSearch(''); setStageFilter(''); setClientFilter(''); setRecruiterFilter('') }}
+              onClick={() => { setSearch(''); setStageFilter(''); setStatusFilter(''); setClientFilter(''); setRecruiterFilter('') }}
               className="text-xs text-[#5E6AD2] hover:underline ml-1"
             >
               Clear filters
