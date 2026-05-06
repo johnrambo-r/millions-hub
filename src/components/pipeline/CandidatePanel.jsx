@@ -52,6 +52,9 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
 
+  // Inline dirty tracking (stage/status + interview date/time)
+  const [inlineDirty, setInlineDirty] = useState(false)
+
   // General edit mode
   const [isEditing, setIsEditing] = useState(false)
   const [editFields, setEditFields] = useState({})
@@ -105,6 +108,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       setEditError('')
       setEditSuccess(false)
       setIsDirty(false)
+      setInlineDirty(false)
       setDialog(null)
       return
     }
@@ -119,6 +123,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     setEditSuccess(false)
     setResumeFile(null)
     setIsDirty(false)
+    setInlineDirty(false)
     setEditInterviewDate(candidate.interview_date ?? '')
     setEditInterviewTime(candidate.interview_time ?? '')
     setInterviewError('')
@@ -145,12 +150,13 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, isEditing, isDirty])
+  }, [isOpen, isEditing, isDirty, inlineDirty])
 
   // Handle pending candidate switch from Pipeline
   useEffect(() => {
     if (!pendingSelect) return
-    if (!isEditing || !isDirty) {
+    const editFormDirty = isEditing && isDirty
+    if (!editFormDirty && !inlineDirty) {
       onPendingResolved?.(pendingSelect)
       return
     }
@@ -158,13 +164,25 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       message: 'Do you want to save your changes before switching candidates?',
       onSave: async () => {
         setDialogSaving(true)
-        const ok = await performSave()
+        let ok = true
+        if (editFormDirty) {
+          ok = await performSave()
+        } else if (inlineDirty) {
+          ok = await saveInlineFields()
+        }
         setDialogSaving(false)
         setDialog(null)
         if (ok) onPendingResolved?.(pendingSelect)
         else onPendingCancelled?.()
       },
       onDiscard: () => {
+        if (inlineDirty) {
+          setEditStage(candidate.stage ?? '')
+          setEditStatus(candidate.status ?? '')
+          setEditInterviewDate(candidate.interview_date ?? '')
+          setEditInterviewTime(candidate.interview_time ?? '')
+          setInlineDirty(false)
+        }
         resetEditState()
         setDialog(null)
         onPendingResolved?.(pendingSelect)
@@ -187,22 +205,34 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
   function handleRequestClose() {
     const orig = originalFieldsRef.current
-    const currentlyDirty = isEditing && (
+    const currentlyDirty = (isEditing && (
       !!resumeFile ||
       Object.keys(editFields).some((k) => editFields[k] !== orig[k])
-    )
+    )) || inlineDirty
 
     if (currentlyDirty) {
       setDialog({
         message: 'You have unsaved changes. What would you like to do?',
         onSave: async () => {
           setDialogSaving(true)
-          const ok = await performSave()
+          let ok = true
+          if (isEditing) {
+            ok = await performSave()
+          } else if (inlineDirty) {
+            ok = await saveInlineFields()
+          }
           setDialogSaving(false)
           setDialog(null)
           if (ok) onClose()
         },
         onDiscard: () => {
+          if (inlineDirty) {
+            setEditStage(candidate.stage ?? '')
+            setEditStatus(candidate.status ?? '')
+            setEditInterviewDate(candidate.interview_date ?? '')
+            setEditInterviewTime(candidate.interview_time ?? '')
+            setInlineDirty(false)
+          }
           resetEditState()
           setDialog(null)
           onClose()
@@ -220,6 +250,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     setEditStage(e.target.value)
     setEditStatus('')
     setSaveError('')
+    setInlineDirty(true)
   }
 
   const editStatusOptions = editStage ? (STAGE_STATUS_MAP[editStage] ?? []) : []
@@ -227,7 +258,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   async function handleSave() {
     if (!editStage || !editStatus) {
       setSaveError('Select both a stage and status')
-      return
+      return false
     }
 
     setSaving(true)
@@ -243,7 +274,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     if (updateError) {
       setSaveError(updateError.message)
       setSaving(false)
-      return
+      return false
     }
 
     const { error: histError } = await supabase.from('status_history').insert({
@@ -267,7 +298,9 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
     setHistory(newHistory ?? [])
     setSaving(false)
+    setInlineDirty(false)
     onUpdate?.({ stage: editStage, status: editStatus, status_changed_at: now })
+    return true
   }
 
   // ── General edit mode ──────────────────────────────────────────────────────
@@ -355,12 +388,29 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
     if (error) {
       setInterviewError(error.message)
-      return
+      return false
     }
 
+    setInlineDirty(false)
     setInterviewSuccess(true)
     setTimeout(() => setInterviewSuccess(false), 3000)
     onUpdate?.({ interview_date: editInterviewDate || null, interview_time: editInterviewTime || null })
+    return true
+  }
+
+  async function saveInlineFields() {
+    const stageChanged = editStage !== (candidate.stage ?? '') || editStatus !== (candidate.status ?? '')
+    const interviewChanged = editInterviewDate !== (candidate.interview_date ?? '') || editInterviewTime !== (candidate.interview_time ?? '')
+    let ok = true
+    if (stageChanged) {
+      const result = await handleSave()
+      if (!result) ok = false
+    }
+    if (interviewChanged) {
+      const result = await handleInterviewSave()
+      if (!result) ok = false
+    }
+    return ok
   }
 
   // Core save logic — returns true on success, false on error
@@ -555,7 +605,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                     </label>
                     <select
                       value={editStatus}
-                      onChange={(e) => { setEditStatus(e.target.value); setSaveError('') }}
+                      onChange={(e) => { setEditStatus(e.target.value); setSaveError(''); setInlineDirty(true) }}
                       disabled={!editStage}
                       className={`${fldCls} ${!editStage ? 'text-[#999] bg-[#FAFAFA] cursor-not-allowed' : ''}`}
                     >
@@ -594,7 +644,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                     <input
                       type="date"
                       value={editInterviewDate}
-                      onChange={(e) => { setEditInterviewDate(e.target.value); setInterviewError('') }}
+                      onChange={(e) => { setEditInterviewDate(e.target.value); setInterviewError(''); setInlineDirty(true) }}
                       className={fldCls}
                     />
                   </div>
@@ -605,7 +655,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                     <input
                       type="time"
                       value={editInterviewTime}
-                      onChange={(e) => { setEditInterviewTime(e.target.value); setInterviewError('') }}
+                      onChange={(e) => { setEditInterviewTime(e.target.value); setInterviewError(''); setInlineDirty(true) }}
                       className={fldCls}
                     />
                   </div>
