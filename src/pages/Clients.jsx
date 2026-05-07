@@ -96,6 +96,7 @@ function ClientsTable({ rows, loading, onSelect }) {
             <TH>Location</TH>
             <TH className="w-32">Status</TH>
             <TH>Primary Contact</TH>
+            <TH>Account Manager</TH>
           </tr>
         </thead>
         <tbody>
@@ -120,6 +121,9 @@ function ClientsTable({ rows, loading, onSelect }) {
               <TD><AccountStatusBadge value={row.account_status} /></TD>
               <TD>
                 <span className="text-[#666] block truncate max-w-[160px]">{row.primary_contact_name ?? '—'}</span>
+              </TD>
+              <TD>
+                <span className="text-[#666] block truncate max-w-[140px]">{row.account_manager?.name ?? '—'}</span>
               </TD>
             </tr>
           ))}

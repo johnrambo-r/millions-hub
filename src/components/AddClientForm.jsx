@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
@@ -46,11 +46,24 @@ export default function AddClientForm({ onClose, onAdded }) {
     primary_contact_phone: '',
     account_status: 'Active',
     notes: '',
+    account_manager_id: '',
+    bd_owner_name: '',
   })
+  const [amProfiles, setAmProfiles] = useState([])
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('id, name, role')
+      .in('role', ['account_manager', 'founder'])
+      .eq('active', true)
+      .order('name')
+      .then(({ data }) => setAmProfiles(data ?? []))
+  }, [])
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -145,6 +158,7 @@ export default function AddClientForm({ onClose, onAdded }) {
       primary_contact_phone:      form.primary_contact_phone.trim() || null,
       account_status:             form.account_status || 'Active',
       notes:                      form.notes.trim() || null,
+      account_manager_id:         form.account_manager_id || null,
     }
 
     const { data, error } = await supabase
@@ -257,6 +271,24 @@ export default function AddClientForm({ onClose, onAdded }) {
                 <select value={form.account_status} onChange={(e) => setField('account_status', e.target.value)} className={fldCls}>
                   {ACCOUNT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
+              </EditField>
+
+              <EditField label="Account Manager">
+                <select value={form.account_manager_id} onChange={(e) => setField('account_manager_id', e.target.value)} className={fldCls}>
+                  <option value="">Select AM</option>
+                  {amProfiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </EditField>
+
+              <EditField label="BD Owner">
+                <input
+                  type="text"
+                  value={form.bd_owner_name}
+                  onChange={(e) => setField('bd_owner_name', e.target.value)}
+                  className={fldCls}
+                  placeholder="Coming soon…"
+                  disabled
+                />
               </EditField>
 
               <EditField label="About" colSpan2>

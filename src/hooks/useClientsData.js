@@ -11,7 +11,7 @@ export function useClientsData(refreshToken = 0) {
     setError('')
     supabase
       .from('clients')
-      .select('*')
+      .select('*, account_manager:profiles!account_manager_id(id, name)')
       .order('created_at', { ascending: false })
       .then(({ data, error: err }) => {
         if (err) setError(err.message)
