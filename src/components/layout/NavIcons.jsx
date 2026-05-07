@@ -46,3 +46,32 @@ export function IconSettings({ className }) {
     </svg>
   )
 }
+
+export function IconUsers({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="8" cy="7" r="3" />
+      <path d="M2 17c0-3.314 2.686-6 6-6s6 2.686 6 6" strokeLinecap="round" />
+      <path d="M14 5c1.657 0 3 1.343 3 3s-1.343 3-3 3" strokeLinecap="round" />
+      <path d="M18 17c0-2.21-1.79-4-4-4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconMandates({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M6 2h8a1 1 0 011 1v14a1 1 0 01-1 1H6a1 1 0 01-1-1V3a1 1 0 011-1z" />
+      <path d="M7 7h6M7 10h6M7 13h3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconReports({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2" y="2" width="16" height="16" rx="1" />
+      <path d="M6 14v-4M10 14V8M14 14V6" strokeLinecap="round" />
+    </svg>
+  )
+}

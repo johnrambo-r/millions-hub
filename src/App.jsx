@@ -9,6 +9,7 @@ import Pipeline from './pages/Pipeline'
 import Clients from './pages/Clients'
 import AddCandidate from './pages/AddCandidate'
 import Settings from './pages/Settings'
+import Users from './pages/Users'
 
 function Protected({ children }) {
   return (
@@ -30,6 +31,9 @@ export default function App() {
           <Route path="/clients" element={<Protected><Clients /></Protected>} />
           <Route path="/add" element={<Protected><AddCandidate /></Protected>} />
           <Route path="/settings" element={<Protected><Settings /></Protected>} />
+          <Route path="/users" element={<Protected><Users /></Protected>} />
+          <Route path="/mandates" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/reports" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </AuthProvider>

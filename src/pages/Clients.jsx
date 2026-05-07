@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react'
+import { Navigate } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import ClientPanel from '../components/ClientPanel'
 import AddClientForm from '../components/AddClientForm'
 import { useClientsData } from '../hooks/useClientsData'
+import useRole from '../hooks/useRole'
 
 // ─── badges ────────────────────────────────────────────────────────────────
 
@@ -133,8 +135,12 @@ const ACCOUNT_STATUSES = ['Active', 'On Hold', 'Inactive']
 const CLIENT_TYPES = ['GCC', 'Product Startup', 'IT Services', 'Consulting']
 
 export default function Clients() {
+  const { isRecruiter, loading: roleLoading } = useRole()
   const [refreshToken, setRefreshToken] = useState(0)
   const { rows, loading, error } = useClientsData(refreshToken)
+
+  if (roleLoading) return null
+  if (isRecruiter) return <Navigate to="/dashboard" replace />
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')

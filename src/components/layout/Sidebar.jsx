@@ -1,14 +1,44 @@
 import { NavLink } from 'react-router-dom'
-import { IconDashboard, IconPipeline, IconAddCandidate, IconClients, IconSettings } from './NavIcons'
-import { useProfile } from '../../hooks/useProfile'
+import {
+  IconDashboard, IconPipeline, IconAddCandidate, IconClients,
+  IconSettings, IconUsers, IconMandates, IconReports,
+} from './NavIcons'
+import useRole from '../../hooks/useRole'
 
-const NAV = [
+const FOUNDER_NAV = [
   { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
   { to: '/pipeline', icon: IconPipeline, label: 'Pipeline' },
   { to: '/clients', icon: IconClients, label: 'Clients' },
+  { to: '/mandates', icon: IconMandates, label: 'Mandates' },
+  { to: '/users', icon: IconUsers, label: 'Users' },
+  { to: '/reports', icon: IconReports, label: 'Reports' },
   { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
   { to: '/settings', icon: IconSettings, label: 'Settings' },
 ]
+
+const ACCOUNT_MANAGER_NAV = [
+  { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
+  { to: '/pipeline', icon: IconPipeline, label: 'Pipeline' },
+  { to: '/clients', icon: IconClients, label: 'Clients' },
+  { to: '/mandates', icon: IconMandates, label: 'Mandates' },
+  { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
+  { to: '/settings', icon: IconSettings, label: 'Settings' },
+]
+
+const RECRUITER_NAV = [
+  { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
+  { to: '/pipeline', icon: IconPipeline, label: 'Pipeline' },
+  { to: '/mandates', icon: IconMandates, label: 'Mandates' },
+  { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
+  { to: '/settings', icon: IconSettings, label: 'Settings' },
+]
+
+function getNav(role) {
+  if (role === 'founder') return FOUNDER_NAV
+  if (role === 'account_manager') return ACCOUNT_MANAGER_NAV
+  if (role === 'recruiter') return RECRUITER_NAV
+  return FOUNDER_NAV
+}
 
 function NavIcon({ to, icon: Icon, label }) {
   return (
@@ -40,7 +70,8 @@ function Avatar({ name }) {
 }
 
 export default function Sidebar() {
-  const profile = useProfile()
+  const { role, profile, loading } = useRole()
+  const nav = loading ? [] : getNav(role)
 
   return (
     <aside
@@ -54,7 +85,7 @@ export default function Sidebar() {
 
       {/* Nav icons */}
       <nav className="flex flex-col gap-1 flex-1">
-        {NAV.map((item) => (
+        {nav.map((item) => (
           <NavIcon key={item.to} {...item} />
         ))}
       </nav>

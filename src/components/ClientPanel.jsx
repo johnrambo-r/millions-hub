@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { AccountStatusBadge, ClientTypeBadge } from '../pages/Clients'
 import { StageBadge, StatusBadge } from './pipeline/StageBadge'
 import UnsavedChangesModal from './UnsavedChangesModal'
+import useRole from '../hooks/useRole'
 
 function Field({ label, children, colSpan2 = false }) {
   return (
@@ -102,6 +103,7 @@ function LinkedCandidates({ clientId }) {
 // ─── Panel ──────────────────────────────────────────────────────────────────
 
 export default function ClientPanel({ client, onClose, onUpdate }) {
+  const { isRecruiter } = useRole()
   const [activeTab, setActiveTab] = useState('details')
   const [isEditing, setIsEditing] = useState(false)
   const [editFields, setEditFields] = useState({})
@@ -284,12 +286,14 @@ export default function ClientPanel({ client, onClose, onUpdate }) {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {!isEditing ? (
-              <button
-                onClick={handleEditStart}
-                className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:border-[#5E6AD2] hover:text-[#5E6AD2] transition"
-              >
-                Edit
-              </button>
+              !isRecruiter && (
+                <button
+                  onClick={handleEditStart}
+                  className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:border-[#5E6AD2] hover:text-[#5E6AD2] transition"
+                >
+                  Edit
+                </button>
+              )
             ) : (
               <>
                 <button
@@ -402,12 +406,16 @@ export default function ClientPanel({ client, onClose, onUpdate }) {
                       <EditField label="Designation">
                         <input type="text" value={editFields.primary_contact_designation || ''} onChange={(e) => setEditField('primary_contact_designation', e.target.value)} className={fldCls} />
                       </EditField>
-                      <EditField label="Email">
-                        <input type="email" value={editFields.primary_contact_email || ''} onChange={(e) => setEditField('primary_contact_email', e.target.value)} className={fldCls} />
-                      </EditField>
-                      <EditField label="Phone">
-                        <input type="tel" value={editFields.primary_contact_phone || ''} onChange={(e) => setEditField('primary_contact_phone', e.target.value)} className={fldCls} />
-                      </EditField>
+                      {!isRecruiter && (
+                        <EditField label="Email">
+                          <input type="email" value={editFields.primary_contact_email || ''} onChange={(e) => setEditField('primary_contact_email', e.target.value)} className={fldCls} />
+                        </EditField>
+                      )}
+                      {!isRecruiter && (
+                        <EditField label="Phone">
+                          <input type="tel" value={editFields.primary_contact_phone || ''} onChange={(e) => setEditField('primary_contact_phone', e.target.value)} className={fldCls} />
+                        </EditField>
+                      )}
                     </div>
                   </div>
 
@@ -461,8 +469,8 @@ export default function ClientPanel({ client, onClose, onUpdate }) {
                   <dl className="grid grid-cols-2 gap-x-8 gap-y-5">
                     <Field label="Name">{client?.primary_contact_name}</Field>
                     <Field label="Designation">{client?.primary_contact_designation}</Field>
-                    <Field label="Email">{client?.primary_contact_email}</Field>
-                    <Field label="Phone">{client?.primary_contact_phone}</Field>
+                    {!isRecruiter && <Field label="Email">{client?.primary_contact_email}</Field>}
+                    {!isRecruiter && <Field label="Phone">{client?.primary_contact_phone}</Field>}
                   </dl>
                 </div>
 
