@@ -143,10 +143,6 @@ export default function Clients() {
   const [typeFilter, setTypeFilter] = useState('')
   const [selectedClient, setSelectedClient] = useState(null)
   const [showAddForm, setShowAddForm] = useState(false)
-
-  if (roleLoading) return null
-  if (isRecruiter) return <Navigate to="/dashboard" replace />
-
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return rows.filter((r) => {
@@ -156,6 +152,9 @@ export default function Clients() {
       return true
     })
   }, [rows, search, statusFilter, typeFilter])
+
+  if (roleLoading) return null
+  if (isRecruiter) return <Navigate to="/dashboard" replace />
 
   function handleAdded(newClient) {
     setShowAddForm(false)
