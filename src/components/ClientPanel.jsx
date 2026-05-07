@@ -45,7 +45,7 @@ const EDITABLE_FIELDS = [
   'name', 'industry', 'client_type', 'location', 'website', 'about',
   'primary_contact_name', 'primary_contact_designation',
   'primary_contact_email', 'primary_contact_phone',
-  'account_status', 'notes',
+  'account_status', 'notes', 'account_manager_id',
 ]
 
 function initEditFields(client) {
@@ -105,6 +105,17 @@ function LinkedCandidates({ clientId }) {
 export default function ClientPanel({ client, onClose, onUpdate }) {
   const { isRecruiter } = useRole()
   const [activeTab, setActiveTab] = useState('details')
+  const [amProfiles, setAmProfiles] = useState([])
+
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('id, name, role')
+      .in('role', ['account_manager', 'founder'])
+      .eq('active', true)
+      .order('name')
+      .then(({ data }) => setAmProfiles(data ?? []))
+  }, [])
   const [isEditing, setIsEditing] = useState(false)
   const [editFields, setEditFields] = useState({})
   const [isDirty, setIsDirty] = useState(false)
@@ -383,6 +394,20 @@ export default function ClientPanel({ client, onClose, onUpdate }) {
                           {ACCOUNT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </EditField>
+                      <EditField label="Account Manager">
+                        <select value={editFields.account_manager_id || ''} onChange={(e) => setEditField('account_manager_id', e.target.value)} className={fldCls}>
+                          <option value="">Select AM</option>
+                          {amProfiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </EditField>
+                      <EditField label="BD Owner">
+                        <input
+                          type="text"
+                          className={fldCls}
+                          placeholder="Coming soon…"
+                          disabled
+                        />
+                      </EditField>
                       <EditField label="About" colSpan2>
                         <textarea
                           value={editFields.about || ''}
@@ -455,6 +480,7 @@ export default function ClientPanel({ client, onClose, onUpdate }) {
                       ) : null}
                     </Field>
                     <Field label="Account Status">{client?.account_status}</Field>
+                    <Field label="Account Manager">{client?.account_manager?.name}</Field>
                     <Field label="Added">{formatDate(client?.created_at)}</Field>
                     {client?.about && (
                       <Field label="About" colSpan2>{client.about}</Field>

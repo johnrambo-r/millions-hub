@@ -117,7 +117,9 @@ function PipelineTable({ rows, loading, onSelect }) {
 export default function Pipeline() {
   const profile = useProfile()
   const [refreshToken, setRefreshToken] = useState(0)
-  const { rows, loading, error } = usePipelineData(profile, refreshToken)
+  const [pipelineMode, setPipelineMode] = useState('my')
+  const isManager = profile?.role !== 'recruiter'
+  const { rows, loading, error } = usePipelineData(profile, refreshToken, pipelineMode)
 
   const [search, setSearch] = useState('')
   const [stageFilter, setStageFilter] = useState('')
@@ -163,14 +165,34 @@ export default function Pipeline() {
     })
   }, [rows, search, stageFilter, statusFilter, clientFilter, recruiterFilter])
 
-  const isManager = profile?.role !== 'recruiter'
-
   return (
     <AppShell title="Pipeline">
       <div className="flex flex-col h-full">
 
         {/* Filter bar */}
         <div className="px-6 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
+          {/* AM/Founder pipeline toggle */}
+          {isManager && (
+            <div className="flex rounded-lg border border-[#5E6AD2] overflow-hidden shrink-0">
+              {[
+                { mode: 'my', label: 'My Pipeline' },
+                { mode: 'accounts', label: 'My Accounts Pipeline' },
+              ].map(({ mode, label }) => (
+                <button
+                  key={mode}
+                  onClick={() => setPipelineMode(mode)}
+                  className={`px-3 h-8 text-sm font-medium transition-colors whitespace-nowrap ${
+                    pipelineMode === mode
+                      ? 'bg-[#5E6AD2] text-white'
+                      : 'bg-white text-[#5E6AD2] hover:bg-[#5E6AD2]/5'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Search */}
           <div className="relative">
             <svg

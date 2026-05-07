@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
-export function usePipelineData(profile, refreshToken = 0) {
+export function usePipelineData(profile, refreshToken = 0, pipelineMode = 'my') {
   const { session } = useAuth()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -14,6 +14,8 @@ export function usePipelineData(profile, refreshToken = 0) {
     async function fetchData() {
       setLoading(true)
       setError(null)
+
+      const userId = session.user.id
 
       let query = supabase
         .from('candidates')
@@ -35,7 +37,22 @@ export function usePipelineData(profile, refreshToken = 0) {
         .order('status_changed_at', { ascending: false })
 
       if (profile.role === 'recruiter') {
-        query = query.eq('recruiter_id', session.user.id)
+        query = query.eq('recruiter_id', userId)
+      } else if (pipelineMode === 'my') {
+        query = query.eq('recruiter_id', userId)
+      } else if (pipelineMode === 'accounts') {
+        const { data: clientRows } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('account_manager_id', userId)
+
+        const clientIds = (clientRows ?? []).map((c) => c.id)
+        if (clientIds.length === 0) {
+          setRows([])
+          setLoading(false)
+          return
+        }
+        query = query.in('client_id', clientIds)
       }
 
       const { data, error } = await query
@@ -50,7 +67,7 @@ export function usePipelineData(profile, refreshToken = 0) {
     }
 
     fetchData()
-  }, [profile, session, refreshToken])
+  }, [profile, session, refreshToken, pipelineMode])
 
   return { rows, loading, error }
 }
