@@ -4,7 +4,6 @@ import FormSection from '../components/add-candidate/FormSection'
 import FormField, { inputCls, inputReadOnly } from '../components/add-candidate/FormField'
 import DuplicateModal from '../components/add-candidate/DuplicateModal'
 import SuccessToast from '../components/add-candidate/SuccessToast'
-import { useAuth } from '../context/AuthContext'
 import { useProfile } from '../hooks/useProfile'
 import { useClients } from '../hooks/useClients'
 import { useNextCandidateId } from '../hooks/useNextCandidateId'
@@ -75,7 +74,6 @@ function Select({ value, onChange, error, disabled, placeholder, children }) {
 // ─── page ──────────────────────────────────────────────────────────────────
 
 export default function AddCandidate() {
-  const { session } = useAuth()
   const profile = useProfile()
   const clients = useClients()
   const { candidateId, regenerate } = useNextCandidateId()
@@ -144,6 +142,9 @@ export default function AddCandidate() {
     setSubmitting(true)
     setFormError('')
 
+    const { data: { user } } = await supabase.auth.getUser()
+    const recruiter_id = user.id
+
     // Upload resume first so the public URL can go into the insert payload
     let publicUrl = null
     if (resumeFile) {
@@ -181,7 +182,7 @@ export default function AddCandidate() {
       current_ctc:        parseFloat(form.current_ctc),
       expected_ctc:       parseFloat(form.expected_ctc),
       client_id:          form.client_id,
-      recruiter_id:       session.user.id,
+      recruiter_id:       recruiter_id,
       stage:              form.stage,
       status:             form.status,
       interview_date:     form.interview_date || null,
@@ -211,7 +212,7 @@ export default function AddCandidate() {
       stage:        form.stage,
       status:       form.status,
       notes:        form.comments.trim() || null,
-      changed_by:   session.user.id,
+      changed_by:   recruiter_id,
       changed_at:   now,
     })
     if (histError) console.error('[AddCandidate] status_history insert:', histError.message)
