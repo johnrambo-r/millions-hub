@@ -138,15 +138,14 @@ export default function Clients() {
   const { isRecruiter, loading: roleLoading } = useRole()
   const [refreshToken, setRefreshToken] = useState(0)
   const { rows, loading, error } = useClientsData(refreshToken)
-
-  if (roleLoading) return null
-  if (isRecruiter) return <Navigate to="/dashboard" replace />
-
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [selectedClient, setSelectedClient] = useState(null)
   const [showAddForm, setShowAddForm] = useState(false)
+
+  if (roleLoading) return null
+  if (isRecruiter) return <Navigate to="/dashboard" replace />
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
