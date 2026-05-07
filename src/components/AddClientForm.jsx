@@ -102,7 +102,11 @@ export default function AddClientForm({ onClose, onAdded }) {
       const text = data?.choices?.[0]?.message?.content
       if (!text) throw new Error('Empty response from Groq')
 
-      const parsed = JSON.parse(text)
+      const cleaned = text
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim()
+      const parsed = JSON.parse(cleaned)
       setForm((prev) => ({
         ...prev,
         industry:    parsed.industry    ?? prev.industry,

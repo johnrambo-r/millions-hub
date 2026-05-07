@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   IconDashboard, IconPipeline, IconAddCandidate, IconClients,
-  IconSettings, IconUsers, IconMandates, IconReports,
+  IconSettings, IconUsers,
 } from './NavIcons'
 import useRole from '../../hooks/useRole'
 
@@ -9,9 +9,7 @@ const FOUNDER_NAV = [
   { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
   { to: '/pipeline', icon: IconPipeline, label: 'Pipeline' },
   { to: '/clients', icon: IconClients, label: 'Clients' },
-  { to: '/mandates', icon: IconMandates, label: 'Mandates' },
   { to: '/users', icon: IconUsers, label: 'Users' },
-  { to: '/reports', icon: IconReports, label: 'Reports' },
   { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
   { to: '/settings', icon: IconSettings, label: 'Settings' },
 ]
@@ -20,7 +18,6 @@ const ACCOUNT_MANAGER_NAV = [
   { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
   { to: '/pipeline', icon: IconPipeline, label: 'Pipeline' },
   { to: '/clients', icon: IconClients, label: 'Clients' },
-  { to: '/mandates', icon: IconMandates, label: 'Mandates' },
   { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
   { to: '/settings', icon: IconSettings, label: 'Settings' },
 ]
@@ -28,7 +25,6 @@ const ACCOUNT_MANAGER_NAV = [
 const RECRUITER_NAV = [
   { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
   { to: '/pipeline', icon: IconPipeline, label: 'Pipeline' },
-  { to: '/mandates', icon: IconMandates, label: 'Mandates' },
   { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
   { to: '/settings', icon: IconSettings, label: 'Settings' },
 ]
