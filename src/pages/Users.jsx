@@ -319,8 +319,7 @@ export default function Users() {
       .select('*')
       .order('created_at', { ascending: true })
       .then(({ data, error: err }) => {
-        console.log('[Users] profiles query result:', { data, error: err })
-        setLoading(false)
+setLoading(false)
         if (err) setError(err.message)
         else setUsers(data ?? [])
       })
