@@ -41,6 +41,97 @@ function CloseIcon() {
 
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
+function LinkMandateModal({ candidateId, linkedMandateIds, userId, onClose, onLinked }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [linking, setLinking] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); return }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      const { data, error } = await supabase
+        .from('mandates')
+        .select('id, title, clients(id, name)')
+        .eq('status', 'active')
+        .ilike('title', `%${query.trim()}%`)
+        .limit(20)
+      setSearching(false)
+      if (error) setError(error.message)
+      else setResults(data ?? [])
+    }, 300)
+    return () => clearTimeout(t)
+  }, [query])
+
+  async function handleLink(mandate) {
+    setLinking(mandate.id)
+    setError('')
+    const { error } = await supabase
+      .from('mandate_candidates')
+      .insert({ mandate_id: mandate.id, candidate_id: candidateId, linked_by: userId })
+    setLinking(null)
+    if (error) setError(error.message)
+    else onLinked()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#F0F0F4] shrink-0">
+          <h3 className="text-sm font-semibold text-[#0F0F12]">Link to Mandate</h3>
+          <button onClick={onClose} className="text-[#999] hover:text-[#0F0F12] transition-colors">
+            <CloseIcon />
+          </button>
+        </div>
+        <div className="p-5 flex flex-col gap-3 overflow-hidden">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setError('') }}
+            placeholder="Search active mandates by title…"
+            className={fldCls}
+            autoFocus
+          />
+          {error && <p className="text-xs text-[#D93025]">{error}</p>}
+          <div className="space-y-2 overflow-y-auto max-h-64">
+            {searching ? (
+              <p className="text-sm text-[#999] py-6 text-center">Searching…</p>
+            ) : query.trim() && results.length === 0 ? (
+              <p className="text-sm text-[#999] py-6 text-center">No active mandates found</p>
+            ) : (
+              results.map((m) => {
+                const alreadyLinked = linkedMandateIds.has(m.id)
+                return (
+                  <div key={m.id} className="flex items-center justify-between rounded-lg border border-[#F0F0F4] px-3 py-2.5">
+                    <div className="min-w-0 pr-3">
+                      <p className="text-sm font-medium text-[#0F0F12] truncate">{m.title}</p>
+                      <p className="text-xs text-[#999] mt-0.5">{m.clients?.name}</p>
+                    </div>
+                    {alreadyLinked ? (
+                      <span className="text-xs text-[#999] shrink-0">Already linked</span>
+                    ) : (
+                      <button
+                        onClick={() => handleLink(m)}
+                        disabled={!!linking}
+                        className="h-7 px-3 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50 shrink-0"
+                        style={{ backgroundColor: '#5E6AD2' }}
+                      >
+                        {linking === m.id ? 'Linking…' : 'Link'}
+                      </button>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSelect, onPendingResolved, onPendingCancelled }) {
   const { session } = useAuth()
   const [history, setHistory] = useState([])
@@ -79,6 +170,11 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   const [interviewError, setInterviewError] = useState('')
   const [interviewSuccess, setInterviewSuccess] = useState(false)
 
+  // Mandates section
+  const [linkedMandates, setLinkedMandates] = useState([])
+  const [mandatesLoading, setMandatesLoading] = useState(false)
+  const [showLinkModal, setShowLinkModal] = useState(false)
+
   const isOpen = !!candidate
 
   useEffect(() => {
@@ -110,6 +206,9 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       setIsDirty(false)
       setInlineDirty(false)
       setDialog(null)
+      setLinkedMandates([])
+      setMandatesLoading(false)
+      setShowLinkModal(false)
       return
     }
 
@@ -140,6 +239,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
         setHistory(data ?? [])
         setHistoryLoading(false)
       })
+
+    loadLinkedMandates(candidate.id)
   }, [candidate?.id])
 
   useEffect(() => {
@@ -196,6 +297,20 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   }, [pendingSelect])
 
   // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function loadLinkedMandates(candidateId) {
+    setMandatesLoading(true)
+    supabase
+      .from('mandate_candidates')
+      .select('id, mandate_id, mandates(id, title, clients(id, name))')
+      .eq('candidate_id', candidateId)
+      .order('linked_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) console.error('[CandidatePanel] mandate_candidates:', error.message)
+        setLinkedMandates(data ?? [])
+        setMandatesLoading(false)
+      })
+  }
 
   function resetEditState() {
     setIsEditing(false)
@@ -494,6 +609,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  const linkedMandateIds = new Set(linkedMandates.map((mc) => mc.mandate_id))
 
   const resumeUrl = candidate?.resume_url?.startsWith('http')
     ? candidate.resume_url
@@ -901,6 +1018,38 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
               </ol>
             )}
           </div>
+
+          <hr className="border-[#F0F0F4]" />
+
+          {/* Mandates */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider">
+                Mandates
+              </h3>
+              <button
+                onClick={() => setShowLinkModal(true)}
+                className="h-7 px-3 rounded-lg text-xs font-semibold border border-[#5E6AD2] text-[#5E6AD2] hover:bg-[#5E6AD2]/5 transition"
+              >
+                Link to Mandate
+              </button>
+            </div>
+
+            {mandatesLoading ? (
+              <p className="text-sm text-[#999]">Loading…</p>
+            ) : linkedMandates.length === 0 ? (
+              <p className="text-sm text-[#999]">Not linked to any mandates</p>
+            ) : (
+              <ul className="space-y-2">
+                {linkedMandates.map((mc) => (
+                  <li key={mc.id} className="rounded-lg border border-[#F0F0F4] px-3 py-2.5">
+                    <p className="text-sm font-medium text-[#0F0F12]">{mc.mandates?.title}</p>
+                    <p className="text-xs text-[#999] mt-0.5">{mc.mandates?.clients?.name}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
 
@@ -912,6 +1061,20 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
           onDiscard={dialog.onDiscard}
           onCancel={dialog.onCancel}
           saving={dialogSaving}
+        />
+      )}
+
+      {/* Link to mandate modal */}
+      {showLinkModal && candidate && (
+        <LinkMandateModal
+          candidateId={candidate.id}
+          linkedMandateIds={linkedMandateIds}
+          userId={session?.user?.id}
+          onClose={() => setShowLinkModal(false)}
+          onLinked={() => {
+            setShowLinkModal(false)
+            loadLinkedMandates(candidate.id)
+          }}
         />
       )}
     </>
