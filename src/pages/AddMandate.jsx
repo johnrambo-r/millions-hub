@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import * as pdfjsLib from 'pdfjs-dist'
+import mammoth from 'mammoth'
 import AppShell from '../components/layout/AppShell'
 import FormSection from '../components/add-candidate/FormSection'
 import FormField, { inputCls } from '../components/add-candidate/FormField'
 import { useClients } from '../hooks/useClients'
 import { supabase } from '../lib/supabase'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).href
 
 // ─── constants ─────────────────────────────────────────────────────────────
 
@@ -127,11 +134,23 @@ export default function AddMandate() {
       if (!content) { setAiError('Paste some text first.'); return }
     } else {
       if (!uploadedFile) { setAiError('Upload a file first.'); return }
-      content = await new Promise((resolve) => {
-        const reader = new FileReader()
-        reader.onload = (e) => resolve(e.target.result ?? '')
-        reader.readAsText(uploadedFile)
-      })
+      const ext = uploadedFile.name.split('.').pop().toLowerCase()
+      const buffer = await uploadedFile.arrayBuffer()
+      if (ext === 'pdf') {
+        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+        const pages = []
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const text = await page.getTextContent()
+          pages.push(text.items.map((item) => item.str).join(' '))
+        }
+        content = pages.join('\n')
+      } else if (ext === 'docx' || ext === 'doc') {
+        const result = await mammoth.extractRawText({ arrayBuffer: buffer })
+        content = result.value
+      } else {
+        content = new TextDecoder().decode(buffer)
+      }
     }
 
     setAiLoading(true)
