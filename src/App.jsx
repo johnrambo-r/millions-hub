@@ -10,6 +10,9 @@ import Clients from './pages/Clients'
 import AddCandidate from './pages/AddCandidate'
 import Settings from './pages/Settings'
 import Users from './pages/Users'
+import MandateList from './pages/MandateList'
+import MandatePanel from './pages/MandatePanel'
+import AddMandate from './pages/AddMandate'
 
 function Protected({ children }) {
   return (
@@ -32,7 +35,9 @@ export default function App() {
           <Route path="/add" element={<Protected><AddCandidate /></Protected>} />
           <Route path="/settings" element={<Protected><Settings /></Protected>} />
           <Route path="/users" element={<Protected><Users /></Protected>} />
-          <Route path="/mandates" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/mandates" element={<Protected><MandateList /></Protected>} />
+          <Route path="/mandates/new" element={<Protected><AddMandate /></Protected>} />
+          <Route path="/mandates/:id" element={<Protected><MandatePanel /></Protected>} />
           <Route path="/reports" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
