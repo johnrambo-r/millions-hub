@@ -220,12 +220,17 @@ function LinkCandidateModal({ mandateId, linkedIds, onLink, onClose }) {
 const selectCls = 'h-7 w-full rounded-md border border-[#F0F0F4] bg-white px-2 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
 function CandidateRow({ mc, onRefresh }) {
+  const { isFounder } = useRole()
   const [stage, setStage] = useState(mc.stage ?? '')
   const [status, setStatus] = useState(mc.status ?? '')
   const [billingApprox, setBillingApprox] = useState(
     mc.billing_value_approx != null ? String(mc.billing_value_approx) : ''
   )
   const [billingFinal, setBillingFinal] = useState(mc.billing_value_final ?? null)
+  const [billingFinalEditing, setBillingFinalEditing] = useState(false)
+  const [billingFinalDraft, setBillingFinalDraft] = useState('')
+  const [offerDate, setOfferDate] = useState(mc.offer_date ?? '')
+  const [joiningDate, setJoiningDate] = useState(mc.date_of_joining ?? '')
   const [saving, setSaving] = useState(false)
   const [unlinkConfirm, setUnlinkConfirm] = useState(false)
   const [unlinking, setUnlinking] = useState(false)
@@ -273,6 +278,18 @@ function CandidateRow({ mc, onRefresh }) {
     billingTimer.current = setTimeout(async () => {
       await save({ billing_value_approx: val !== '' ? parseFloat(val) : null })
     }, 600)
+  }
+
+  function handleBillingFinalEditStart() {
+    setBillingFinalDraft(billingFinal != null ? String(billingFinal) : '')
+    setBillingFinalEditing(true)
+  }
+
+  async function handleBillingFinalBlur() {
+    const newVal = billingFinalDraft !== '' ? parseFloat(billingFinalDraft) : null
+    setBillingFinal(newVal)
+    setBillingFinalEditing(false)
+    await save({ billing_value_final: newVal })
   }
 
   async function handleUnlink() {
@@ -360,15 +377,69 @@ function CandidateRow({ mc, onRefresh }) {
               <label className="text-xs text-[#999] mb-1 block">
                 {isFinalized ? 'Billing Value (₹) — final, locked' : 'Billing Value (₹)'}
               </label>
+              {isFinalized && billingFinalEditing ? (
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={billingFinalDraft}
+                  onChange={(e) => setBillingFinalDraft(e.target.value)}
+                  onBlur={handleBillingFinalBlur}
+                  autoFocus
+                  className={`${selectCls} h-8`}
+                />
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={isFinalized ? (billingFinal ?? '') : billingApprox}
+                    onChange={handleBillingChange}
+                    readOnly={isFinalized}
+                    placeholder="e.g. 1150000"
+                    className={`${selectCls} h-8 ${isFinalized ? 'bg-[#F5F5F8] text-[#666] cursor-not-allowed' : ''}`}
+                  />
+                  {isFinalized && isFounder && (
+                    <button
+                      onClick={handleBillingFinalEditStart}
+                      title="Edit final billing value"
+                      className="shrink-0 text-[#999] hover:text-[#5E6AD2] transition-colors"
+                    >
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+                        <path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {stage === 'Offer' && (
+            <div className="mt-2">
+              <label className="text-xs text-[#999] mb-1 block">Offer Date</label>
               <input
-                type="number"
-                min={0}
-                step={1}
-                value={isFinalized ? (billingFinal ?? '') : billingApprox}
-                onChange={handleBillingChange}
-                readOnly={isFinalized}
-                placeholder="e.g. 1150000"
-                className={`${selectCls} h-8 ${isFinalized ? 'bg-[#F5F5F8] text-[#666] cursor-not-allowed' : ''}`}
+                type="date"
+                required
+                value={offerDate}
+                onChange={(e) => setOfferDate(e.target.value)}
+                onBlur={() => save({ offer_date: offerDate || null })}
+                className={`${selectCls} h-8`}
+              />
+            </div>
+          )}
+
+          {stage === 'Joining' && (
+            <div className="mt-2">
+              <label className="text-xs text-[#999] mb-1 block">Date of Joining</label>
+              <input
+                type="date"
+                required
+                value={joiningDate}
+                onChange={(e) => setJoiningDate(e.target.value)}
+                onBlur={() => save({ date_of_joining: joiningDate || null })}
+                className={`${selectCls} h-8`}
               />
             </div>
           )}

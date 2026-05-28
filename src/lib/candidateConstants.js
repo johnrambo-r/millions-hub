@@ -15,7 +15,7 @@ export const STAGE_STATUS_MAP = {
   'L3':           ['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
   'Client Onsite':['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
   'HR':           ['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
-  'Offer':        ['Offer Released', 'Offer Accepted', 'Offer Declined', 'Offer Revoked', 'Invoice Raised'],
+  'Offer':        ['Offer Released', 'Offer Accepted', 'Offer Declined', 'Offer Revoked'],
   'Joining':      ['Yet to Join', 'JYTR', 'Joining & Dropped', 'Invoice Raised'],
 }
 
