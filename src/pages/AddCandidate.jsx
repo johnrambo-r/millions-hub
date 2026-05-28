@@ -9,7 +9,7 @@ import { useClients } from '../hooks/useClients'
 import { useNextCandidateId } from '../hooks/useNextCandidateId'
 import { supabase } from '../lib/supabase'
 import {
-  QUALIFICATIONS, NOTICE_PERIODS, STAGES, STAGE_STATUS_MAP, PASSING_YEARS,
+  QUALIFICATIONS, NOTICE_PERIODS, PASSING_YEARS,
 } from '../lib/candidateConstants'
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -25,8 +25,7 @@ const INITIAL = {
   total_exp: '', relevant_exp: '',
   emp_mode: '', payroll_company: '', notice_period: '',
   current_ctc: '', expected_ctc: '',
-  client_id: '', stage: '', status: '',
-  interview_date: '', interview_time: '', comments: '',
+  client_id: '', comments: '',
 }
 
 function validate(f) {
@@ -50,8 +49,6 @@ function validate(f) {
   if (f.current_ctc === '')       e.current_ctc = 'Required'
   if (f.expected_ctc === '')      e.expected_ctc = 'Required'
   if (!f.client_id)               e.client_id = 'Required'
-  if (!f.stage)                   e.stage = 'Required'
-  if (!f.status)                  e.status = 'Required'
   return e
 }
 
@@ -102,11 +99,6 @@ export default function AddCandidate() {
   function setField(key, value) {
     setForm((p) => ({ ...p, [key]: value }))
     setErrors((p) => ({ ...p, [key]: undefined }))
-  }
-
-  function handleStageChange(e) {
-    setForm((p) => ({ ...p, stage: e.target.value, status: '' }))
-    setErrors((p) => ({ ...p, stage: undefined, status: undefined }))
   }
 
   function handleModeChange(e) {
@@ -161,7 +153,6 @@ export default function AddCandidate() {
       }
     }
 
-    const now = new Date().toISOString()
     const payload = {
       id:                 candidateId,
       name:               form.name.trim(),
@@ -183,22 +174,15 @@ export default function AddCandidate() {
       expected_ctc:       parseFloat(form.expected_ctc),
       client_id:          form.client_id,
       recruiter_id:       recruiter_id,
-      stage:              form.stage,
-      status:             form.status,
-      interview_date:     form.interview_date || null,
-      interview_time:     form.interview_time || null,
       comments:           form.comments.trim() || null,
-      status_changed_at:  now,
       resume_url:         publicUrl,
     }
 
     console.log('[AddCandidate] publicUrl:', publicUrl)
 
-    const { data: inserted, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from('candidates')
       .insert(payload)
-      .select('id')
-      .single()
 
     if (insertError) {
       setFormError(insertError.message)
@@ -206,18 +190,6 @@ export default function AddCandidate() {
       return { success: false, reason: 'insert' }
     }
 
-    // First status history row
-    const { error: histError } = await supabase.from('status_history').insert({
-      candidate_id: inserted.id,
-      stage:        form.stage,
-      status:       form.status,
-      notes:        form.comments.trim() || null,
-      changed_by:   recruiter_id,
-      changed_at:   now,
-    })
-    if (histError) console.error('[AddCandidate] status_history insert:', histError.message)
-
-    // Reset
     const addedId = candidateId
     setForm(INITIAL)
     setErrors({})
@@ -235,8 +207,6 @@ export default function AddCandidate() {
     e.preventDefault()
     submitCandidate(false)
   }
-
-  const statusOptions = form.stage ? (STAGE_STATUS_MAP[form.stage] ?? []) : []
 
   return (
     <AppShell title="Add Candidate">
@@ -451,7 +421,7 @@ export default function AddCandidate() {
 
           {/* ── Section 5: Recruitment details ── */}
           <FormSection title="Recruitment details">
-            <FormField label="Submitted to client" required error={errors.client_id}>
+            <FormField label="Client" required error={errors.client_id}>
               <Select
                 value={form.client_id}
                 onChange={(e) => setField('client_id', e.target.value)}
@@ -464,47 +434,6 @@ export default function AddCandidate() {
 
             <FormField label="Assigned recruiter">
               <input value={profile?.name ?? '…'} readOnly className={inputReadOnly} />
-            </FormField>
-
-            <FormField label="Stage" required error={errors.stage}>
-              <Select
-                value={form.stage}
-                onChange={handleStageChange}
-                error={errors.stage}
-                placeholder="Select stage"
-              >
-                {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </Select>
-            </FormField>
-
-            <FormField label="Status" required error={errors.status}>
-              <Select
-                value={form.status}
-                onChange={(e) => setField('status', e.target.value)}
-                error={errors.status}
-                placeholder={form.stage ? 'Select status' : 'Select stage first'}
-                disabled={!form.stage}
-              >
-                {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-              </Select>
-            </FormField>
-
-            <FormField label="Interview date" error={errors.interview_date}>
-              <input
-                type="date"
-                value={form.interview_date}
-                onChange={(e) => setField('interview_date', e.target.value)}
-                className={inputCls(errors.interview_date)}
-              />
-            </FormField>
-
-            <FormField label="Interview time" error={errors.interview_time}>
-              <input
-                type="time"
-                value={form.interview_time}
-                onChange={(e) => setField('interview_time', e.target.value)}
-                className={inputCls(errors.interview_time)}
-              />
             </FormField>
 
             <FormField label="Comments" error={errors.comments} className="col-span-2">

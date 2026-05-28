@@ -15,8 +15,8 @@ export const STAGE_STATUS_MAP = {
   'L3':           ['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
   'Client Onsite':['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
   'HR':           ['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
-  'Offer':        ['Offer Released', 'Offer Accepted', 'Offer Declined', 'Offer Revoked'],
-  'Joining':      ['Yet to Join', 'Joined', 'Dropped Out', 'Joining & Dropped'],
+  'Offer':        ['Offer Released', 'Offer Accepted', 'Offer Declined', 'Offer Revoked', 'Invoice Raised'],
+  'Joining':      ['Yet to Join', 'Joined', 'Dropped Out', 'Joining & Dropped', 'Invoice Raised'],
 }
 
 export const PASSING_YEARS = Array.from({ length: 2025 - 1985 + 1 }, (_, i) => 2025 - i)

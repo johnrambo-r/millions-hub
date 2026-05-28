@@ -3,7 +3,6 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { StageBadge, StatusBadge } from './StageBadge'
 import {
-  STAGES, STAGE_STATUS_MAP,
   QUALIFICATIONS, PASSING_YEARS, NOTICE_PERIODS,
 } from '../../lib/candidateConstants'
 import UnsavedChangesModal from '../UnsavedChangesModal'
@@ -137,15 +136,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  // Stage / status update
-  const [editStage, setEditStage] = useState('')
-  const [editStatus, setEditStatus] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
-
-  // Inline dirty tracking (stage/status + interview date/time)
-  const [inlineDirty, setInlineDirty] = useState(false)
-
   // General edit mode
   const [isEditing, setIsEditing] = useState(false)
   const [editFields, setEditFields] = useState({})
@@ -162,13 +152,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   const [resumeFile, setResumeFile] = useState(null)
   const resumeFileRef = useRef(null)
   const originalFieldsRef = useRef({})
-
-  // Inline interview date/time
-  const [editInterviewDate, setEditInterviewDate] = useState('')
-  const [editInterviewTime, setEditInterviewTime] = useState('')
-  const [interviewSaving, setInterviewSaving] = useState(false)
-  const [interviewError, setInterviewError] = useState('')
-  const [interviewSuccess, setInterviewSuccess] = useState(false)
 
   // Mandates section
   const [linkedMandates, setLinkedMandates] = useState([])
@@ -197,14 +180,10 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   useEffect(() => {
     if (!candidate) {
       setHistory([])
-      setEditStage('')
-      setEditStatus('')
-      setSaveError('')
       setIsEditing(false)
       setEditError('')
       setEditSuccess(false)
       setIsDirty(false)
-      setInlineDirty(false)
       setDialog(null)
       setLinkedMandates([])
       setMandatesLoading(false)
@@ -214,19 +193,11 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
     console.log('[CandidatePanel] resume_url:', candidate.resume_url)
 
-    setEditStage(candidate.stage ?? '')
-    setEditStatus(candidate.status ?? '')
-    setSaveError('')
     setIsEditing(false)
     setEditError('')
     setEditSuccess(false)
     setResumeFile(null)
     setIsDirty(false)
-    setInlineDirty(false)
-    setEditInterviewDate(candidate.interview_date ?? '')
-    setEditInterviewTime(candidate.interview_time ?? '')
-    setInterviewError('')
-    setInterviewSuccess(false)
 
     setHistoryLoading(true)
     supabase
@@ -251,13 +222,12 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, isEditing, isDirty, inlineDirty])
+  }, [isOpen, isEditing, isDirty])
 
   // Handle pending candidate switch from Pipeline
   useEffect(() => {
     if (!pendingSelect) return
-    const editFormDirty = isEditing && isDirty
-    if (!editFormDirty && !inlineDirty) {
+    if (!isEditing || !isDirty) {
       onPendingResolved?.(pendingSelect)
       return
     }
@@ -265,25 +235,13 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       message: 'Do you want to save your changes before switching candidates?',
       onSave: async () => {
         setDialogSaving(true)
-        let ok = true
-        if (editFormDirty) {
-          ok = await performSave()
-        } else if (inlineDirty) {
-          ok = await saveInlineFields()
-        }
+        const ok = await performSave()
         setDialogSaving(false)
         setDialog(null)
         if (ok) onPendingResolved?.(pendingSelect)
         else onPendingCancelled?.()
       },
       onDiscard: () => {
-        if (inlineDirty) {
-          setEditStage(candidate.stage ?? '')
-          setEditStatus(candidate.status ?? '')
-          setEditInterviewDate(candidate.interview_date ?? '')
-          setEditInterviewTime(candidate.interview_time ?? '')
-          setInlineDirty(false)
-        }
         resetEditState()
         setDialog(null)
         onPendingResolved?.(pendingSelect)
@@ -302,7 +260,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     setMandatesLoading(true)
     supabase
       .from('mandate_candidates')
-      .select('id, mandate_id, mandates(id, title, clients(id, name))')
+      .select('id, mandate_id, stage, status, applicant_id, mandates(id, title, clients(id, name))')
       .eq('candidate_id', candidateId)
       .order('linked_at', { ascending: false })
       .then(({ data, error }) => {
@@ -320,34 +278,22 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
   function handleRequestClose() {
     const orig = originalFieldsRef.current
-    const currentlyDirty = (isEditing && (
+    const currentlyDirty = isEditing && (
       !!resumeFile ||
       Object.keys(editFields).some((k) => editFields[k] !== orig[k])
-    )) || inlineDirty
+    )
 
     if (currentlyDirty) {
       setDialog({
         message: 'You have unsaved changes. What would you like to do?',
         onSave: async () => {
           setDialogSaving(true)
-          let ok = true
-          if (isEditing) {
-            ok = await performSave()
-          } else if (inlineDirty) {
-            ok = await saveInlineFields()
-          }
+          const ok = await performSave()
           setDialogSaving(false)
           setDialog(null)
           if (ok) onClose()
         },
         onDiscard: () => {
-          if (inlineDirty) {
-            setEditStage(candidate.stage ?? '')
-            setEditStatus(candidate.status ?? '')
-            setEditInterviewDate(candidate.interview_date ?? '')
-            setEditInterviewTime(candidate.interview_time ?? '')
-            setInlineDirty(false)
-          }
           resetEditState()
           setDialog(null)
           onClose()
@@ -357,65 +303,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     } else {
       onClose()
     }
-  }
-
-  // ── Stage / status update ──────────────────────────────────────────────────
-
-  function handleEditStageChange(e) {
-    setEditStage(e.target.value)
-    setEditStatus('')
-    setSaveError('')
-    setInlineDirty(true)
-  }
-
-  const editStatusOptions = editStage ? (STAGE_STATUS_MAP[editStage] ?? []) : []
-
-  async function handleSave() {
-    if (!editStage || !editStatus) {
-      setSaveError('Select both a stage and status')
-      return false
-    }
-
-    setSaving(true)
-    setSaveError('')
-
-    const now = new Date().toISOString()
-
-    const { error: updateError } = await supabase
-      .from('candidates')
-      .update({ stage: editStage, status: editStatus })
-      .eq('id', candidate.id)
-
-    if (updateError) {
-      setSaveError(updateError.message)
-      setSaving(false)
-      return false
-    }
-
-    const { error: histError } = await supabase.from('status_history').insert({
-      candidate_id: candidate.id,
-      stage:        editStage,
-      status:       editStatus,
-      changed_by:   session.user.id,
-      changed_at:   now,
-    })
-
-    if (histError) {
-      console.error('[CandidatePanel] status_history insert:', histError.message)
-      setSaveError(`Stage saved, but history not recorded: ${histError.message}`)
-    }
-
-    const { data: newHistory } = await supabase
-      .from('status_history')
-      .select('id, stage, status, notes, changed_at, profiles(name)')
-      .eq('candidate_id', candidate.id)
-      .order('changed_at', { ascending: true })
-
-    setHistory(newHistory ?? [])
-    setSaving(false)
-    setInlineDirty(false)
-    onUpdate?.({ stage: editStage, status: editStatus, status_changed_at: now })
-    return true
   }
 
   // ── General edit mode ──────────────────────────────────────────────────────
@@ -448,8 +335,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       notice_period:      candidate.notice_period ?? '',
       current_ctc:        candidate.current_ctc?.toString() ?? '',
       expected_ctc:       candidate.expected_ctc?.toString() ?? '',
-      interview_date:     candidate.interview_date ?? '',
-      interview_time:     candidate.interview_time ?? '',
       comments:           candidate.comments ?? '',
     }
     originalFieldsRef.current = { ...fields }
@@ -484,48 +369,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     } else {
       resetEditState()
     }
-  }
-
-  async function handleInterviewSave() {
-    setInterviewSaving(true)
-    setInterviewError('')
-
-    const { error } = await supabase
-      .from('candidates')
-      .update({
-        interview_date:  editInterviewDate || null,
-        interview_time:  editInterviewTime || null,
-        last_updated_at: new Date().toISOString(),
-      })
-      .eq('id', candidate.id)
-
-    setInterviewSaving(false)
-
-    if (error) {
-      setInterviewError(error.message)
-      return false
-    }
-
-    setInlineDirty(false)
-    setInterviewSuccess(true)
-    setTimeout(() => setInterviewSuccess(false), 3000)
-    onUpdate?.({ interview_date: editInterviewDate || null, interview_time: editInterviewTime || null })
-    return true
-  }
-
-  async function saveInlineFields() {
-    const stageChanged = editStage !== (candidate.stage ?? '') || editStatus !== (candidate.status ?? '')
-    const interviewChanged = editInterviewDate !== (candidate.interview_date ?? '') || editInterviewTime !== (candidate.interview_time ?? '')
-    let ok = true
-    if (stageChanged) {
-      const result = await handleSave()
-      if (!result) ok = false
-    }
-    if (interviewChanged) {
-      const result = await handleInterviewSave()
-      if (!result) ok = false
-    }
-    return ok
   }
 
   // Core save logic — returns true on success, false on error
@@ -574,8 +417,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       notice_period:      editFields.notice_period || null,
       current_ctc:        editFields.current_ctc !== '' ? parseFloat(editFields.current_ctc) : null,
       expected_ctc:       editFields.expected_ctc !== '' ? parseFloat(editFields.expected_ctc) : null,
-      interview_date:     editFields.interview_date || null,
-      interview_time:     editFields.interview_time || null,
       comments:           editFields.comments.trim() || null,
       last_updated_at:    new Date().toISOString(),
       ...(newResumeUrl !== undefined && { resume_url: newResumeUrl }),
@@ -688,117 +529,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
             </div>
           )}
 
-          {/* Stage / Status badges */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <StageBadge value={candidate?.stage} />
-            <StatusBadge value={candidate?.status} />
-          </div>
-
-          {/* Inline edit controls — hidden during general edit */}
-          {!isEditing && (
-            <>
-              <div className="pb-2">
-                <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">
-                  Update stage / status
-                </h3>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
-                      Stage
-                    </label>
-                    <select
-                      value={editStage}
-                      onChange={handleEditStageChange}
-                      className={fldCls}
-                    >
-                      <option value="">Select stage</option>
-                      {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
-                      Status
-                    </label>
-                    <select
-                      value={editStatus}
-                      onChange={(e) => { setEditStatus(e.target.value); setSaveError(''); setInlineDirty(true) }}
-                      disabled={!editStage}
-                      className={`${fldCls} ${!editStage ? 'text-[#999] bg-[#FAFAFA] cursor-not-allowed' : ''}`}
-                    >
-                      <option value="">{editStage ? 'Select status' : 'Select stage first'}</option>
-                      {editStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {saveError && (
-                  <p className="text-xs text-[#D93025] mt-2">{saveError}</p>
-                )}
-
-                <div className="mt-3 flex justify-end">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving || !editStage || !editStatus}
-                    className="h-9 px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: '#5E6AD2' }}
-                  >
-                    {saving ? 'Saving…' : 'Save'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="pb-2">
-                <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">
-                  Update interview
-                </h3>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
-                      Interview date
-                    </label>
-                    <input
-                      type="date"
-                      value={editInterviewDate}
-                      onChange={(e) => { setEditInterviewDate(e.target.value); setInterviewError(''); setInlineDirty(true) }}
-                      className={fldCls}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">
-                      Interview time
-                    </label>
-                    <input
-                      type="time"
-                      value={editInterviewTime}
-                      onChange={(e) => { setEditInterviewTime(e.target.value); setInterviewError(''); setInlineDirty(true) }}
-                      className={fldCls}
-                    />
-                  </div>
-                </div>
-
-                {interviewError && (
-                  <p className="text-xs text-[#D93025] mt-2">{interviewError}</p>
-                )}
-                {interviewSuccess && (
-                  <p className="text-xs text-green-600 mt-2">Interview details saved.</p>
-                )}
-
-                <div className="mt-3 flex justify-end">
-                  <button
-                    onClick={handleInterviewSave}
-                    disabled={interviewSaving}
-                    className="h-9 px-5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: '#5E6AD2' }}
-                  >
-                    {interviewSaving ? 'Saving…' : 'Save'}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
           <hr className="border-[#F0F0F4]" />
 
           {isEditing ? (
@@ -878,12 +608,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                 <EditField label="Expected CTC (LPA)">
                   <input type="number" min={0} step={0.5} value={editFields.expected_ctc ?? ''} onChange={(e) => setEditField('expected_ctc', e.target.value)} className={fldCls} />
                 </EditField>
-                <EditField label="Interview date">
-                  <input type="date" value={editFields.interview_date || ''} onChange={(e) => setEditField('interview_date', e.target.value)} className={fldCls} />
-                </EditField>
-                <EditField label="Interview time">
-                  <input type="time" value={editFields.interview_time || ''} onChange={(e) => setEditField('interview_time', e.target.value)} className={fldCls} />
-                </EditField>
                 <EditField label="Comments" colSpan2>
                   <textarea
                     value={editFields.comments || ''}
@@ -956,8 +680,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
               <Field label="Expected CTC">
                 {candidate?.expected_ctc != null ? `${candidate.expected_ctc} LPA` : null}
               </Field>
-              <Field label="Interview date">{formatDate(candidate?.interview_date)}</Field>
-              <Field label="Interview time">{candidate?.interview_time}</Field>
               <Field label="Last updated">{formatDate(candidate?.status_changed_at)}</Field>
               {candidate?.comments && (
                 <Field label="Comments" colSpan2>{candidate.comments}</Field>
@@ -1045,6 +767,13 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                   <li key={mc.id} className="rounded-lg border border-[#F0F0F4] px-3 py-2.5">
                     <p className="text-sm font-medium text-[#0F0F12]">{mc.mandates?.title}</p>
                     <p className="text-xs text-[#999] mt-0.5">{mc.mandates?.clients?.name}</p>
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      {mc.stage && <StageBadge value={mc.stage} />}
+                      {mc.status && <StatusBadge value={mc.status} />}
+                      {mc.applicant_id && (
+                        <span className="font-mono text-xs text-[#999]">{mc.applicant_id}</span>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>

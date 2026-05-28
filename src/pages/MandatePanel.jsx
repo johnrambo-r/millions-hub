@@ -4,6 +4,7 @@ import AppShell from '../components/layout/AppShell'
 import { supabase } from '../lib/supabase'
 import UnsavedChangesModal from '../components/UnsavedChangesModal'
 import useRole from '../hooks/useRole'
+import { STAGES, STAGE_STATUS_MAP } from '../lib/candidateConstants'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -214,6 +215,119 @@ function LinkCandidateModal({ mandateId, linkedIds, onLink, onClose }) {
   )
 }
 
+// ─── Candidate row (inline stage/status/billing) ─────────────────────────────
+
+const selectCls = 'h-7 w-full rounded-md border border-[#F0F0F4] bg-white px-2 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
+
+function CandidateRow({ mc, onRefresh }) {
+  const [stage, setStage] = useState(mc.stage ?? '')
+  const [status, setStatus] = useState(mc.status ?? '')
+  const [billingApprox, setBillingApprox] = useState(
+    mc.billing_value_approx != null ? String(mc.billing_value_approx) : ''
+  )
+  const [billingFinal, setBillingFinal] = useState(mc.billing_value_final ?? null)
+  const [saving, setSaving] = useState(false)
+  const billingTimer = useRef(null)
+
+  const showBilling = stage === 'Offer' || stage === 'Joining'
+  const isFinalized = billingFinal != null
+  const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
+
+  async function save(updates) {
+    setSaving(true)
+    await supabase.from('mandate_candidates').update(updates).eq('id', mc.id)
+    setSaving(false)
+  }
+
+  async function handleStageChange(e) {
+    const val = e.target.value
+    setStage(val)
+    setStatus('')
+    await save({ stage: val || null, status: null })
+  }
+
+  async function handleStatusChange(e) {
+    const val = e.target.value
+    setStatus(val)
+    const updates = { status: val || null }
+    if (val === 'Invoice Raised' && !isFinalized) {
+      const approxNum = billingApprox !== '' ? parseFloat(billingApprox) : null
+      updates.billing_value_final = approxNum
+      setBillingFinal(approxNum)
+    }
+    await save(updates)
+  }
+
+  function handleBillingChange(e) {
+    if (isFinalized) return
+    const val = e.target.value
+    setBillingApprox(val)
+    clearTimeout(billingTimer.current)
+    billingTimer.current = setTimeout(async () => {
+      await save({ billing_value_approx: val !== '' ? parseFloat(val) : null })
+    }, 600)
+  }
+
+  return (
+    <li className="rounded-lg border border-[#F0F0F4] px-4 py-3 bg-[#FAFAFA]">
+      <div className="flex items-start justify-between gap-2 mb-2.5">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
+          {mc.candidate?.skill_role && (
+            <p className="text-xs text-[#666] mt-0.5 truncate">{mc.candidate.skill_role}</p>
+          )}
+          <p className="text-xs text-[#999] mt-0.5">Linked {formatDate(mc.linked_at)}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {saving && <span className="text-xs text-[#999]">Saving…</span>}
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${mc.submitted_to_client ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+            {mc.submitted_to_client ? 'Submitted' : 'Not submitted'}
+          </span>
+          {mc.client_response && <ClientResponseBadge value={mc.client_response} />}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <select
+          value={stage}
+          onChange={handleStageChange}
+          className={selectCls}
+        >
+          <option value="">Stage</option>
+          {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select
+          value={status}
+          onChange={handleStatusChange}
+          disabled={!stage}
+          className={`${selectCls} ${!stage ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          <option value="">{stage ? 'Status' : '—'}</option>
+          {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {showBilling && (
+        <div className="mt-2">
+          <label className="text-xs text-[#999] mb-1 block">
+            {isFinalized ? 'Billing value (final, locked)' : 'Billing value approx (LPA)'}
+          </label>
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={isFinalized ? (billingFinal ?? '') : billingApprox}
+            onChange={handleBillingChange}
+            readOnly={isFinalized}
+            placeholder="e.g. 18.5"
+            className={`${selectCls} h-8 ${isFinalized ? 'bg-[#F5F5F8] text-[#666] cursor-not-allowed' : ''}`}
+          />
+        </div>
+      )}
+    </li>
+  )
+}
+
 // ─── Candidates tab ──────────────────────────────────────────────────────────
 
 function CandidatesTab({ mandateId, mandateCandidates, loading, onRefresh }) {
@@ -245,33 +359,7 @@ function CandidatesTab({ mandateId, mandateCandidates, loading, onRefresh }) {
       ) : (
         <ul className="space-y-2">
           {mandateCandidates.map((mc) => (
-            <li key={mc.id} className="rounded-lg border border-[#F0F0F4] px-4 py-3 bg-[#FAFAFA]">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
-                  {mc.candidate?.skill_role && (
-                    <p className="text-xs text-[#666] mt-0.5 truncate">{mc.candidate.skill_role}</p>
-                  )}
-                  <p className="text-xs text-[#999] mt-0.5">Linked {formatDate(mc.linked_at)}</p>
-                </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  {mc.candidate?.stage && (
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 whitespace-nowrap">
-                      {mc.candidate.stage}
-                    </span>
-                  )}
-                  {mc.candidate?.status && (
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700 whitespace-nowrap">
-                      {mc.candidate.status}
-                    </span>
-                  )}
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${mc.submitted_to_client ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {mc.submitted_to_client ? 'Submitted' : 'Not submitted'}
-                  </span>
-                  {mc.client_response && <ClientResponseBadge value={mc.client_response} />}
-                </div>
-              </div>
-            </li>
+            <CandidateRow key={mc.id} mc={mc} onRefresh={onRefresh} />
           ))}
         </ul>
       )}
@@ -719,7 +807,7 @@ export default function MandatePanel() {
     setCandidatesLoading(true)
     supabase
       .from('mandate_candidates')
-      .select('*, candidate:candidates!candidate_id(id, name, skill_role, email, stage, status)')
+      .select('*, candidate:candidates!candidate_id(id, name, skill_role, email)')
       .eq('mandate_id', id)
       .order('linked_at', { ascending: false })
       .then(({ data }) => {
