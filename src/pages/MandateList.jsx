@@ -109,6 +109,7 @@ function MandatesTable({ rows, loading, onSelect, hasFilters }) {
       <table className="w-full min-w-[860px] border-collapse">
         <thead>
           <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+            <TH className="w-36">Job ID</TH>
             <TH>Title</TH>
             <TH>Client</TH>
             <TH>AM</TH>
@@ -125,6 +126,9 @@ function MandatesTable({ rows, loading, onSelect, hasFilters }) {
               onClick={() => onSelect(row.id)}
               className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors"
             >
+              <TD>
+                <span className="font-mono text-xs text-[#666] whitespace-nowrap">{row.job_id ?? '—'}</span>
+              </TD>
               <TD>
                 <span className="font-medium text-[#0F0F12] block truncate max-w-[220px]">
                   {row.title}

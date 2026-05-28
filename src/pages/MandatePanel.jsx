@@ -374,7 +374,10 @@ function ReadView({ mandate, mandateRecruiters }) {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h2 className="text-xl font-semibold text-[#0F0F12] mb-2 leading-snug">{mandate.title}</h2>
+        <h2 className="text-xl font-semibold text-[#0F0F12] leading-snug">{mandate.title}</h2>
+        {mandate.job_id && (
+          <p className="font-mono text-xs text-gray-400 mt-0.5 mb-2">{mandate.job_id}</p>
+        )}
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge value={mandate.status} />
           <PriorityBadge value={mandate.priority} />
