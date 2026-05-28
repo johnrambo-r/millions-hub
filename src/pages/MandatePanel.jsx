@@ -357,7 +357,7 @@ function SubmissionsTab({ mandateCandidates, loading, onUpdateResponse }) {
 
 // ─── Read view ───────────────────────────────────────────────────────────────
 
-function ReadView({ mandate }) {
+function ReadView({ mandate, mandateRecruiters }) {
   const expDisplay =
     mandate.experience_min != null || mandate.experience_max != null
       ? `${mandate.experience_min ?? '?'} – ${mandate.experience_max ?? '?'} yrs`
@@ -401,6 +401,17 @@ function ReadView({ mandate }) {
           <Field label="Employment Type">{EMPLOYMENT_LABELS[mandate.employment_type] ?? mandate.employment_type}</Field>
           <Field label="Budget">{budgetDisplay}</Field>
           <Field label="Created">{formatDate(mandate.created_at)}</Field>
+          <Field label="Assigned Recruiters" colSpan2>
+            {mandateRecruiters.length === 0 ? '—' : (
+              <div className="flex flex-wrap gap-1.5 mt-0.5">
+                {mandateRecruiters.map((mr) => (
+                  <span key={mr.recruiter_id} className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700">
+                    {mr.recruiter?.name ?? mr.recruiter_id}
+                  </span>
+                ))}
+              </div>
+            )}
+          </Field>
         </dl>
       </div>
 
@@ -692,7 +703,7 @@ export default function MandatePanel() {
     if (!id) return
     supabase
       .from('mandate_recruiters')
-      .select('recruiter_id')
+      .select('recruiter_id, recruiter:profiles!recruiter_id(id, name)')
       .eq('mandate_id', id)
       .then(({ data }) => setMandateRecruiters(data ?? []))
   }
@@ -941,7 +952,7 @@ export default function MandatePanel() {
           <div className="flex-[3] overflow-y-auto px-6 py-6 border-r border-[#F0F0F4]">
             {isEditing
               ? <EditView editFields={editFields} setEditField={setEditField} amProfiles={amProfiles} recruiterProfiles={recruiterProfiles} selectedRecruiters={selectedRecruiters} toggleRecruiter={toggleRecruiter} />
-              : <ReadView mandate={mandate} />
+              : <ReadView mandate={mandate} mandateRecruiters={mandateRecruiters} />
             }
           </div>
 
