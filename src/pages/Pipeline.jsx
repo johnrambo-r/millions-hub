@@ -1,10 +1,38 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import AppShell from '../components/layout/AppShell'
 import { StageBadge, StatusBadge } from '../components/pipeline/StageBadge'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
 import { useProfile } from '../hooks/useProfile'
-import { usePipelineData } from '../hooks/usePipelineData'
+import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
 import { STAGE_STATUS_MAP } from '../lib/candidateConstants'
+
+// ─── constants ─────────────────────────────────────────────────────────────
+
+const L2_PLUS_STAGES = ['L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining']
+
+const CANDIDATE_SELECT = `
+  id, name, email, phone, alt_contact,
+  current_location, preferred_location,
+  education, year_of_passing,
+  current_company, skill_role,
+  total_exp, relevant_exp,
+  emp_mode, payroll_company, notice_period,
+  current_ctc, expected_ctc,
+  interview_date, interview_time,
+  comments, resume_url,
+  stage, status, status_changed_at,
+  recruiter_id,
+  clients(id, name),
+  profiles(id, name)
+`
+
+const TABS = [
+  { id: 'pipeline',   label: 'Pipeline' },
+  { id: 'active',     label: 'Active' },
+  { id: 'unassigned', label: 'Unassigned' },
+  { id: 'all',        label: 'All' },
+]
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -116,10 +144,12 @@ function PipelineTable({ rows, loading, onSelect }) {
 
 export default function Pipeline() {
   const profile = useProfile()
+  const { session } = useAuth()
+  const [activeTab, setActiveTab] = useState('pipeline')
   const [refreshToken, setRefreshToken] = useState(0)
-  const [pipelineMode, setPipelineMode] = useState('my')
-  const isManager = profile?.role !== 'recruiter'
-  const { rows, loading, error } = usePipelineData(profile, refreshToken, pipelineMode)
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const [search, setSearch] = useState('')
   const [stageFilter, setStageFilter] = useState('')
@@ -129,30 +159,97 @@ export default function Pipeline() {
   const [selectedCandidate, setSelectedCandidate] = useState(null)
   const [pendingSelect, setPendingSelect] = useState(null)
 
-  // Derive unique filter options from loaded data
+  const isManager = profile?.role !== 'recruiter'
+
+  // ── Data fetching ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!profile || !session) return
+
+    async function fetchData() {
+      setLoading(true)
+      setError(null)
+
+      const userId = session.user.id
+
+      let baseQuery = supabase
+        .from('candidates')
+        .select(CANDIDATE_SELECT)
+        .order('status_changed_at', { ascending: false })
+
+      if (profile.role === 'recruiter') {
+        baseQuery = baseQuery.eq('recruiter_id', userId)
+      }
+
+      if (activeTab === 'pipeline' || activeTab === 'active') {
+        const { data: linked } = await supabase
+          .from('mandate_candidates')
+          .select('candidate_id')
+
+        const linkedIds = [...new Set((linked ?? []).map((r) => r.candidate_id))]
+
+        if (linkedIds.length === 0) {
+          setRows([])
+          setLoading(false)
+          return
+        }
+
+        let q = baseQuery.in('id', linkedIds)
+        if (activeTab === 'pipeline') {
+          q = q.in('stage', L2_PLUS_STAGES)
+        }
+
+        const { data, error: fetchErr } = await q
+        if (fetchErr) setError(fetchErr.message)
+        else setRows(data ?? [])
+
+      } else if (activeTab === 'unassigned') {
+        const [candidatesRes, linkedRes] = await Promise.all([
+          baseQuery,
+          supabase.from('mandate_candidates').select('candidate_id'),
+        ])
+
+        const linkedIdSet = new Set((linkedRes.data ?? []).map((r) => r.candidate_id))
+
+        if (candidatesRes.error) setError(candidatesRes.error.message)
+        else setRows((candidatesRes.data ?? []).filter((c) => !linkedIdSet.has(c.id)))
+
+      } else {
+        // 'all'
+        const { data, error: fetchErr } = await baseQuery
+        if (fetchErr) setError(fetchErr.message)
+        else setRows(data ?? [])
+      }
+
+      setLoading(false)
+    }
+
+    fetchData()
+  }, [profile, session, activeTab, refreshToken]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Filter options derived from loaded data ──────────────────────────────
   const stages = useMemo(
     () => [...new Set(rows.map((r) => r.stage).filter(Boolean))].sort(),
     [rows]
   )
 
   const statusOptions = useMemo(() => {
-    if (!stageFilter) {
-      return [...new Set(Object.values(STAGE_STATUS_MAP).flat())]
-    }
+    if (!stageFilter) return [...new Set(Object.values(STAGE_STATUS_MAP).flat())]
     return STAGE_STATUS_MAP[stageFilter] ?? []
   }, [stageFilter])
+
   const clients = useMemo(() => {
     const seen = new Map()
     rows.forEach((r) => { if (r.clients?.id) seen.set(r.clients.id, r.clients) })
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [rows])
+
   const recruiters = useMemo(() => {
     const seen = new Map()
     rows.forEach((r) => { if (r.profiles?.id) seen.set(r.profiles.id, r.profiles) })
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [rows])
 
-  // Client-side filtering
+  // ── Client-side filtering ────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return rows.filter((r) => {
@@ -165,34 +262,38 @@ export default function Pipeline() {
     })
   }, [rows, search, stageFilter, statusFilter, clientFilter, recruiterFilter])
 
+  function handleTabChange(tab) {
+    setActiveTab(tab)
+    setSearch('')
+    setStageFilter('')
+    setStatusFilter('')
+    setClientFilter('')
+    setRecruiterFilter('')
+  }
+
   return (
-    <AppShell title="Pipeline">
+    <AppShell title="Candidates">
       <div className="flex flex-col h-full">
+
+        {/* Tab bar */}
+        <div className="px-6 border-b border-[#F0F0F4] bg-white flex items-center gap-1 shrink-0">
+          {TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => handleTabChange(id)}
+              className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === id
+                  ? 'border-[#5E6AD2] text-[#5E6AD2]'
+                  : 'border-transparent text-[#999] hover:text-[#666]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         {/* Filter bar */}
         <div className="px-6 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
-          {/* AM/Founder pipeline toggle */}
-          {isManager && (
-            <div className="flex rounded-lg border border-[#5E6AD2] overflow-hidden shrink-0">
-              {[
-                { mode: 'my', label: 'My Pipeline' },
-                { mode: 'accounts', label: 'My Accounts Pipeline' },
-              ].map(({ mode, label }) => (
-                <button
-                  key={mode}
-                  onClick={() => setPipelineMode(mode)}
-                  className={`px-3 h-8 text-sm font-medium transition-colors whitespace-nowrap ${
-                    pipelineMode === mode
-                      ? 'bg-[#5E6AD2] text-white'
-                      : 'bg-white text-[#5E6AD2] hover:bg-[#5E6AD2]/5'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Search */}
           <div className="relative">
             <svg
@@ -233,7 +334,6 @@ export default function Pipeline() {
             </SelectFilter>
           )}
 
-          {/* Active filter count + clear */}
           {(search || stageFilter || statusFilter || clientFilter || recruiterFilter) && (
             <button
               onClick={() => { setSearch(''); setStageFilter(''); setStatusFilter(''); setClientFilter(''); setRecruiterFilter('') }}
@@ -243,7 +343,6 @@ export default function Pipeline() {
             </button>
           )}
 
-          {/* Row count */}
           <span className="text-xs text-[#999] ml-auto">
             {loading ? '…' : `${filtered.length} candidate${filtered.length !== 1 ? 's' : ''}`}
           </span>

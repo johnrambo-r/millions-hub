@@ -7,7 +7,7 @@ import useRole from '../../hooks/useRole'
 
 const FOUNDER_NAV = [
   { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
-  { to: '/pipeline', icon: IconPipeline, label: 'Pipeline' },
+  { to: '/pipeline', icon: IconPipeline, label: 'Candidates' },
   { to: '/clients', icon: IconClients, label: 'Clients' },
   { to: '/mandates', icon: IconMandates, label: 'Mandates' },
   { to: '/users', icon: IconUsers, label: 'Users' },
@@ -17,7 +17,7 @@ const FOUNDER_NAV = [
 
 const ACCOUNT_MANAGER_NAV = [
   { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
-  { to: '/pipeline', icon: IconPipeline, label: 'Pipeline' },
+  { to: '/pipeline', icon: IconPipeline, label: 'Candidates' },
   { to: '/clients', icon: IconClients, label: 'Clients' },
   { to: '/mandates', icon: IconMandates, label: 'Mandates' },
   { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
@@ -26,7 +26,7 @@ const ACCOUNT_MANAGER_NAV = [
 
 const RECRUITER_NAV = [
   { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
-  { to: '/pipeline', icon: IconPipeline, label: 'Pipeline' },
+  { to: '/pipeline', icon: IconPipeline, label: 'Candidates' },
   { to: '/mandates', icon: IconMandates, label: 'Mandates' },
   { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
   { to: '/settings', icon: IconSettings, label: 'Settings' },

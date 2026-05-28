@@ -227,6 +227,8 @@ function CandidateRow({ mc, onRefresh }) {
   )
   const [billingFinal, setBillingFinal] = useState(mc.billing_value_final ?? null)
   const [saving, setSaving] = useState(false)
+  const [unlinkConfirm, setUnlinkConfirm] = useState(false)
+  const [unlinking, setUnlinking] = useState(false)
   const billingTimer = useRef(null)
 
   const showBilling = stage === 'Offer' || stage === 'Joining'
@@ -273,61 +275,104 @@ function CandidateRow({ mc, onRefresh }) {
     }, 600)
   }
 
+  async function handleUnlink() {
+    setUnlinking(true)
+    const { error } = await supabase
+      .from('mandate_candidates')
+      .delete()
+      .eq('mandate_id', mc.mandate_id)
+      .eq('candidate_id', mc.candidate_id)
+    setUnlinking(false)
+    if (!error) onRefresh()
+  }
+
   return (
     <li className="rounded-lg border border-[#F0F0F4] px-4 py-3 bg-[#FAFAFA]">
-      <div className="flex items-start justify-between gap-2 mb-2.5">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
-          {mc.candidate?.skill_role && (
-            <p className="text-xs text-[#666] mt-0.5 truncate">{mc.candidate.skill_role}</p>
+      {unlinkConfirm ? (
+        <div className="py-1">
+          <p className="text-sm text-[#0F0F12] mb-3">
+            Are you sure you want to unlink <span className="font-medium">{mc.candidate?.name ?? 'this candidate'}</span> from this mandate?
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleUnlink}
+              disabled={unlinking}
+              className="h-7 px-3 rounded-lg text-xs font-semibold text-white bg-red-600 hover:opacity-90 disabled:opacity-50 transition"
+            >
+              {unlinking ? 'Unlinking…' : 'Confirm'}
+            </button>
+            <button
+              onClick={() => setUnlinkConfirm(false)}
+              disabled={unlinking}
+              className="h-7 px-3 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-start justify-between gap-2 mb-2.5">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
+              {mc.candidate?.skill_role && (
+                <p className="text-xs text-[#666] mt-0.5 truncate">{mc.candidate.skill_role}</p>
+              )}
+              <p className="text-xs text-[#999] mt-0.5">Linked {formatDate(mc.linked_at)}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {saving && <span className="text-xs text-[#999]">Saving…</span>}
+              <button
+                onClick={() => setUnlinkConfirm(true)}
+                className="h-7 px-2.5 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#999] hover:border-red-300 hover:text-red-600 transition"
+              >
+                Unlink
+              </button>
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${mc.submitted_to_client ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                {mc.submitted_to_client ? 'Submitted' : 'Not submitted'}
+              </span>
+              {mc.client_response && <ClientResponseBadge value={mc.client_response} />}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={stage}
+              onChange={handleStageChange}
+              className={selectCls}
+            >
+              <option value="">Stage</option>
+              {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select
+              value={status}
+              onChange={handleStatusChange}
+              disabled={!stage}
+              className={`${selectCls} ${!stage ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <option value="">{stage ? 'Status' : '—'}</option>
+              {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          {showBilling && (
+            <div className="mt-2">
+              <label className="text-xs text-[#999] mb-1 block">
+                {isFinalized ? 'Billing Value (₹) — final, locked' : 'Billing Value (₹)'}
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={isFinalized ? (billingFinal ?? '') : billingApprox}
+                onChange={handleBillingChange}
+                readOnly={isFinalized}
+                placeholder="e.g. 1150000"
+                className={`${selectCls} h-8 ${isFinalized ? 'bg-[#F5F5F8] text-[#666] cursor-not-allowed' : ''}`}
+              />
+            </div>
           )}
-          <p className="text-xs text-[#999] mt-0.5">Linked {formatDate(mc.linked_at)}</p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {saving && <span className="text-xs text-[#999]">Saving…</span>}
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${mc.submitted_to_client ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
-            {mc.submitted_to_client ? 'Submitted' : 'Not submitted'}
-          </span>
-          {mc.client_response && <ClientResponseBadge value={mc.client_response} />}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <select
-          value={stage}
-          onChange={handleStageChange}
-          className={selectCls}
-        >
-          <option value="">Stage</option>
-          {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select
-          value={status}
-          onChange={handleStatusChange}
-          disabled={!stage}
-          className={`${selectCls} ${!stage ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          <option value="">{stage ? 'Status' : '—'}</option>
-          {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-      </div>
-
-      {showBilling && (
-        <div className="mt-2">
-          <label className="text-xs text-[#999] mb-1 block">
-            {isFinalized ? 'Billing Value (₹) — final, locked' : 'Billing Value (₹)'}
-          </label>
-          <input
-            type="number"
-            min={0}
-            step={1}
-            value={isFinalized ? (billingFinal ?? '') : billingApprox}
-            onChange={handleBillingChange}
-            readOnly={isFinalized}
-            placeholder="e.g. 1150000"
-            className={`${selectCls} h-8 ${isFinalized ? 'bg-[#F5F5F8] text-[#666] cursor-not-allowed' : ''}`}
-          />
-        </div>
+        </>
       )}
     </li>
   )
