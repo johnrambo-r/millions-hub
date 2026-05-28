@@ -429,7 +429,7 @@ function ReadView({ mandate }) {
 
 // ─── Edit view ───────────────────────────────────────────────────────────────
 
-function EditView({ editFields, setEditField, amProfiles }) {
+function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, selectedRecruiters, toggleRecruiter }) {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
@@ -554,6 +554,38 @@ function EditView({ editFields, setEditField, amProfiles }) {
       <hr className="border-[#F0F0F4]" />
 
       <div>
+        <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">Team</h3>
+        <div>
+          <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">Assigned Recruiters</label>
+          {recruiterProfiles.length === 0 ? (
+            <p className="text-sm text-[#999]">No recruiters found</p>
+          ) : (
+            <div className="flex flex-wrap gap-2 pt-0.5">
+              {recruiterProfiles.map((r) => {
+                const on = selectedRecruiters.includes(r.id)
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => toggleRecruiter(r.id)}
+                    className={`h-8 px-3 rounded-full text-sm font-medium border transition ${
+                      on
+                        ? 'bg-[#5E6AD2] text-white border-[#5E6AD2]'
+                        : 'bg-white text-[#666] border-[#F0F0F4] hover:border-[#5E6AD2]/50 hover:text-[#5E6AD2]'
+                    }`}
+                  >
+                    {r.name}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <hr className="border-[#F0F0F4]" />
+
+      <div>
         <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">Notes &amp; JD</h3>
         <div className="space-y-5">
           <EditField label="Internal Notes">
@@ -609,8 +641,12 @@ export default function MandatePanel() {
   const [dialog, setDialog]                 = useState(null)
   const [dialogSaving, setDialogSaving]     = useState(false)
   const [activeTab, setActiveTab]           = useState('candidates')
+  const [recruiterProfiles, setRecruiterProfiles] = useState([])
+  const [mandateRecruiters, setMandateRecruiters] = useState([])
+  const [selectedRecruiters, setSelectedRecruiters] = useState([])
 
   const originalFieldsRef = useRef({})
+  const originalRecruitersRef = useRef([])
 
   // ── Fetch mandate ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -640,6 +676,29 @@ export default function MandatePanel() {
       .then(({ data }) => setAmProfiles(data ?? []))
   }, [])
 
+  // ── Fetch recruiter profiles ──────────────────────────────────────────
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('id, name')
+      .eq('role', 'recruiter')
+      .eq('active', true)
+      .order('name')
+      .then(({ data }) => setRecruiterProfiles(data ?? []))
+  }, [])
+
+  // ── Fetch mandate recruiters ──────────────────────────────────────────
+  function fetchMandateRecruiters() {
+    if (!id) return
+    supabase
+      .from('mandate_recruiters')
+      .select('recruiter_id')
+      .eq('mandate_id', id)
+      .then(({ data }) => setMandateRecruiters(data ?? []))
+  }
+
+  useEffect(() => { fetchMandateRecruiters() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Fetch mandate candidates ──────────────────────────────────────────
   function fetchCandidates() {
     if (!id) return
@@ -661,9 +720,12 @@ export default function MandatePanel() {
   useEffect(() => {
     if (!isEditing) return
     const orig = originalFieldsRef.current
-    const dirty = EDITABLE_FIELDS.some((k) => String(editFields[k] ?? '') !== String(orig[k] ?? ''))
-    setIsDirty(dirty)
-  }, [editFields, isEditing])
+    const fieldsDirty = EDITABLE_FIELDS.some((k) => String(editFields[k] ?? '') !== String(orig[k] ?? ''))
+    const origSet = new Set(originalRecruitersRef.current)
+    const curSet = new Set(selectedRecruiters)
+    const recruitersDirty = origSet.size !== curSet.size || [...origSet].some((rid) => !curSet.has(rid))
+    setIsDirty(fieldsDirty || recruitersDirty)
+  }, [editFields, selectedRecruiters, isEditing])
 
   useEffect(() => {
     if (isDirty) window.onbeforeunload = () => true
@@ -676,10 +738,19 @@ export default function MandatePanel() {
     const fields = initEditFields(mandate)
     originalFieldsRef.current = { ...fields }
     setEditFields(fields)
+    const currentIds = mandateRecruiters.map((r) => r.recruiter_id)
+    originalRecruitersRef.current = currentIds
+    setSelectedRecruiters(currentIds)
     setEditError('')
     setEditSuccess(false)
     setIsDirty(false)
     setIsEditing(true)
+  }
+
+  function toggleRecruiter(rid) {
+    setSelectedRecruiters((prev) =>
+      prev.includes(rid) ? prev.filter((r) => r !== rid) : [...prev, rid]
+    )
   }
 
   function setEditField(key, value) {
@@ -748,6 +819,30 @@ export default function MandatePanel() {
     }
 
     setMandate(data)
+
+    // ── Recruiter diff ───────────────────────────────────────────────────
+    const origSet = new Set(originalRecruitersRef.current)
+    const newSet = new Set(selectedRecruiters)
+    const toAdd = [...newSet].filter((rid) => !origSet.has(rid))
+    const toRemove = [...origSet].filter((rid) => !newSet.has(rid))
+
+    if (toAdd.length > 0) {
+      const rows = toAdd.map((rid) => ({ mandate_id: id, recruiter_id: rid }))
+      const { error: addErr } = await supabase.from('mandate_recruiters').insert(rows)
+      if (addErr) { setEditError(addErr.message); setEditSaving(false); return false }
+    }
+    if (toRemove.length > 0) {
+      const { error: removeErr } = await supabase
+        .from('mandate_recruiters')
+        .delete()
+        .eq('mandate_id', id)
+        .in('recruiter_id', toRemove)
+      if (removeErr) { setEditError(removeErr.message); setEditSaving(false); return false }
+    }
+
+    originalRecruitersRef.current = [...newSet]
+    fetchMandateRecruiters()
+
     setIsEditing(false)
     setIsDirty(false)
     setEditSuccess(true)
@@ -845,7 +940,7 @@ export default function MandatePanel() {
           {/* Left — mandate details */}
           <div className="flex-[3] overflow-y-auto px-6 py-6 border-r border-[#F0F0F4]">
             {isEditing
-              ? <EditView editFields={editFields} setEditField={setEditField} amProfiles={amProfiles} />
+              ? <EditView editFields={editFields} setEditField={setEditField} amProfiles={amProfiles} recruiterProfiles={recruiterProfiles} selectedRecruiters={selectedRecruiters} toggleRecruiter={toggleRecruiter} />
               : <ReadView mandate={mandate} />
             }
           </div>
