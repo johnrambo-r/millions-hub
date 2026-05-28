@@ -233,17 +233,22 @@ function CandidateRow({ mc, onRefresh }) {
   const isFinalized = billingFinal != null
   const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
 
-  async function save(updates) {
+  async function save(updates, triggerRefresh = false) {
     setSaving(true)
-    await supabase.from('mandate_candidates').update(updates).eq('id', mc.id)
+    const { error } = await supabase
+      .from('mandate_candidates')
+      .update(updates)
+      .eq('mandate_id', mc.mandate_id)
+      .eq('candidate_id', mc.candidate_id)
     setSaving(false)
+    if (!error && triggerRefresh) onRefresh()
   }
 
   async function handleStageChange(e) {
     const val = e.target.value
     setStage(val)
     setStatus('')
-    await save({ stage: val || null, status: null })
+    await save({ stage: val || null, status: null }, true)
   }
 
   async function handleStatusChange(e) {
@@ -255,7 +260,7 @@ function CandidateRow({ mc, onRefresh }) {
       updates.billing_value_final = approxNum
       setBillingFinal(approxNum)
     }
-    await save(updates)
+    await save(updates, true)
   }
 
   function handleBillingChange(e) {
@@ -310,16 +315,16 @@ function CandidateRow({ mc, onRefresh }) {
       {showBilling && (
         <div className="mt-2">
           <label className="text-xs text-[#999] mb-1 block">
-            {isFinalized ? 'Billing value (final, locked)' : 'Billing value approx (LPA)'}
+            {isFinalized ? 'Billing Value (₹) — final, locked' : 'Billing Value (₹)'}
           </label>
           <input
             type="number"
             min={0}
-            step={0.01}
+            step={1}
             value={isFinalized ? (billingFinal ?? '') : billingApprox}
             onChange={handleBillingChange}
             readOnly={isFinalized}
-            placeholder="e.g. 18.5"
+            placeholder="e.g. 1150000"
             className={`${selectCls} h-8 ${isFinalized ? 'bg-[#F5F5F8] text-[#666] cursor-not-allowed' : ''}`}
           />
         </div>
