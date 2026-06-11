@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import FormSection from '../components/add-candidate/FormSection'
 import FormField, { inputCls, inputReadOnly } from '../components/add-candidate/FormField'
@@ -71,6 +72,7 @@ function Select({ value, onChange, error, disabled, placeholder, children }) {
 // ─── page ──────────────────────────────────────────────────────────────────
 
 export default function AddCandidate() {
+  const navigate = useNavigate()
   const profile = useProfile()
   const clients = useClients()
   const { candidateId, regenerate } = useNextCandidateId()
@@ -121,7 +123,7 @@ export default function AddCandidate() {
     if (!force) {
       const { data: dupes } = await supabase
         .from('candidates')
-        .select('id, name, email, phone, stage, status')
+        .select('id, name, email, phone, mandate_candidates(stage, status, mandate_id, mandates(id, title))')
         .or(`email.eq.${form.email.trim()},phone.eq.${form.phone.trim()}`)
 
       if (dupes?.length > 0) {
@@ -206,6 +208,11 @@ export default function AddCandidate() {
   function handleSubmit(e) {
     e.preventDefault()
     submitCandidate(false)
+  }
+
+  function handleUseExisting(candidate) {
+    setDuplicates(null)
+    navigate('/pipeline', { state: { openCandidateId: candidate.id } })
   }
 
   return (
@@ -498,8 +505,10 @@ export default function AddCandidate() {
 
       <DuplicateModal
         duplicates={duplicates}
+        submittedName={form.name.trim()}
         onCancel={() => setDuplicates(null)}
         onProceed={() => submitCandidate(true)}
+        onUseExisting={handleUseExisting}
       />
 
       <SuccessToast candidateId={toast} onDismiss={() => setToast('')} />

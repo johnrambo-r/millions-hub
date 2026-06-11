@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import { StageBadge, StatusBadge } from '../components/pipeline/StageBadge'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
@@ -340,6 +341,7 @@ function AllCandidatesTable({ rows, loading, onSelect }) {
 // ─── page ────────────────────────────────────────────────────────────────────
 
 export default function Pipeline() {
+  const location = useLocation()
   const profile = useProfile()
   const { session } = useAuth()
   const { isRecruiter, isAccountManager, isFounder } = useRole()
@@ -361,6 +363,20 @@ export default function Pipeline() {
   const [pendingSelect, setPendingSelect] = useState(null)
 
   const isMCTab = MC_TABS.has(activeTab)
+
+  // Auto-open panel when navigated from duplicate detection flow
+  useEffect(() => {
+    const openId = location.state?.openCandidateId
+    if (!openId) return
+    // Clear the router state so back-navigation doesn't re-trigger
+    window.history.replaceState({}, '')
+    supabase
+      .from('candidates')
+      .select(CANDIDATE_FIELDS)
+      .eq('id', openId)
+      .single()
+      .then(({ data }) => { if (data) setSelectedCandidate(data) })
+  }, [location.state?.openCandidateId])
 
   // ── data fetch ─────────────────────────────────────────────────────────────
   useEffect(() => {
