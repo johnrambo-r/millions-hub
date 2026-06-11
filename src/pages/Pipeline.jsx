@@ -5,46 +5,113 @@ import CandidatePanel from '../components/pipeline/CandidatePanel'
 import { useProfile } from '../hooks/useProfile'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
-import { STAGE_STATUS_MAP } from '../lib/candidateConstants'
+import {
+  STAGE_STATUS_MAP,
+  ACTIVE_STATUSES,
+  TALENT_POOL_STATUSES,
+  PLACED_STATUSES,
+} from '../lib/candidateConstants'
+import useRole from '../hooks/useRole'
 
-// ─── constants ─────────────────────────────────────────────────────────────
+// ─── constants ──────────────────────────────────────────────────────────────
 
-const L2_PLUS_STAGES = ['L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining']
+const TABS = [
+  { id: 'active',      label: 'Active' },
+  { id: 'talent_pool', label: 'Talent Pool' },
+  { id: 'placed',      label: 'Placed' },
+  { id: 'unassigned',  label: 'Unassigned' },
+  { id: 'all',         label: 'All' },
+]
 
-const CANDIDATE_SELECT = `
+// Full candidate fields so CandidatePanel has everything it needs
+const CANDIDATE_FIELDS = `
   id, name, email, phone, alt_contact,
   current_location, preferred_location,
   education, year_of_passing,
-  current_company, skill_role,
-  total_exp, relevant_exp,
+  current_company, skill_role, total_exp, relevant_exp,
   emp_mode, payroll_company, notice_period,
   current_ctc, expected_ctc,
-  interview_date, interview_time,
   comments, resume_url,
-  stage, status, status_changed_at,
-  recruiter_id,
-  clients(id, name),
-  profiles(id, name)
+  recruiter_id, created_at, status_changed_at,
+  profiles(id, name),
+  clients(id, name)
 `
 
-const TABS = [
-  { id: 'pipeline',   label: 'Pipeline' },
-  { id: 'active',     label: 'Active' },
-  { id: 'unassigned', label: 'Unassigned' },
-  { id: 'all',        label: 'All' },
-]
+const MC_SELECT = `
+  id, stage, status, applicant_id, status_changed_at, linked_by, linked_at,
+  interview_date, interview_time, mandate_id,
+  linked_by_profile:profiles!linked_by(id, name),
+  candidates(${CANDIDATE_FIELDS}),
+  mandates(id, title, clients(id, name))
+`
 
-// ─── helpers ───────────────────────────────────────────────────────────────
+const UNASSIGNED_SELECT = `
+  id, name, email, phone, skill_role, total_exp, recruiter_id, created_at,
+  profiles(id, name),
+  clients(id, name)
+`
+
+const ALL_SELECT = `
+  id, name, email, phone, skill_role, total_exp, recruiter_id, created_at,
+  profiles(id, name),
+  clients(id, name),
+  mandate_candidates(stage, status, status_changed_at)
+`
+
+const MC_TABS = new Set(['active', 'talent_pool', 'placed'])
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function daysSince(dateStr) {
+  if (!dateStr) return 0
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
+}
 
 function formatRelativeDate(str) {
   if (!str) return '—'
-  const days = Math.floor((Date.now() - new Date(str).getTime()) / 86400000)
+  const days = daysSince(str)
   if (days === 0) return 'Today'
   if (days === 1) return 'Yesterday'
   if (days < 7) return `${days}d ago`
   if (days < 30) return `${Math.floor(days / 7)}w ago`
   return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
+
+function unassignedRowBg(createdAt) {
+  const d = daysSince(createdAt)
+  if (d >= 14) return 'bg-red-50'
+  if (d >= 7)  return 'bg-amber-50'
+  return ''
+}
+
+function noShowRowBg(row) {
+  if (row.status !== 'No Show') return ''
+  const d = daysSince(row.status_changed_at)
+  if (d >= 30) return 'bg-red-50'
+  if (d >= 15) return 'bg-amber-50'
+  return ''
+}
+
+// Latest mc record from a candidate row (All tab)
+function latestMC(row) {
+  const mcs = row.mandate_candidates
+  if (!mcs?.length) return null
+  return mcs.reduce((best, mc) =>
+    !best || new Date(mc.status_changed_at) > new Date(best.status_changed_at) ? mc : best
+  , null)
+}
+
+// ─── small UI components ────────────────────────────────────────────────────
+
+const TH = ({ children, className = '' }) => (
+  <th className={`px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap ${className}`}>
+    {children}
+  </th>
+)
+
+const TD = ({ children, className = '' }) => (
+  <td className={`px-4 py-3 text-sm ${className}`}>{children}</td>
+)
 
 function SelectFilter({ value, onChange, placeholder, children }) {
   return (
@@ -59,164 +126,329 @@ function SelectFilter({ value, onChange, placeholder, children }) {
   )
 }
 
-// ─── table ─────────────────────────────────────────────────────────────────
+function EmptyState({ message = 'No candidates match the current filters' }) {
+  return (
+    <div className="flex items-center justify-center py-20 text-sm text-[#999]">{message}</div>
+  )
+}
 
-const TH = ({ children, className = '' }) => (
-  <th className={`px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap ${className}`}>
-    {children}
-  </th>
-)
+function LoadingState() {
+  return <div className="flex items-center justify-center py-20 text-sm text-[#999]">Loading…</div>
+}
 
-const TD = ({ children, className = '' }) => (
-  <td className={`px-4 py-3 text-sm ${className}`}>{children}</td>
-)
+// ─── MC table (Active / Talent Pool / Placed) ───────────────────────────────
 
-function PipelineTable({ rows, loading, onSelect }) {
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-sm text-[#999]">
-        Loading candidates…
-      </div>
-    )
-  }
+function MCTable({ rows, loading, onSelect, activeTab }) {
+  if (loading) return <LoadingState />
+  if (rows.length === 0) return <EmptyState />
 
-  if (rows.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-20 text-sm text-[#999]">
-        No candidates match the current filters
-      </div>
-    )
-  }
+  const isTalentPool = activeTab === 'talent_pool'
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[960px] border-collapse">
+      <table className="w-full min-w-[1020px] border-collapse">
         <thead>
           <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
-            <TH className="w-36">ID</TH>
+            <TH className="w-32">App ID</TH>
             <TH>Name</TH>
             <TH>Role</TH>
-            <TH>Client</TH>
+            <TH>Client · Mandate</TH>
             <TH className="w-28">Stage</TH>
             <TH className="w-36">Status</TH>
             <TH>Recruiter</TH>
-            <TH className="w-24">Exp</TH>
+            <TH className="w-20">Exp</TH>
             <TH className="w-28">Updated</TH>
+            {isTalentPool && <TH className="w-24"></TH>}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.id}
-              onClick={() => onSelect(row)}
-              className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors"
-            >
-              <TD className="font-mono text-xs text-[#999] whitespace-nowrap">
-                {row.id}
-              </TD>
-              <TD>
-                <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">
-                  {row.name}
-                </span>
-              </TD>
-              <TD>
-                <span className="text-[#666] block truncate max-w-[140px]">{row.skill_role ?? '—'}</span>
-              </TD>
-              <TD>
-                <span className="text-[#666] block truncate max-w-[120px]">{row.clients?.name ?? '—'}</span>
-              </TD>
-              <TD><StageBadge value={row.stage} /></TD>
-              <TD><StatusBadge value={row.status} /></TD>
-              <TD>
-                <span className="text-[#666] block truncate max-w-[120px]">{row.profiles?.name ?? '—'}</span>
-              </TD>
-              <TD className="text-[#666]">{row.total_exp != null ? `${row.total_exp} yrs` : '—'}</TD>
-              <TD className="text-xs text-[#999]">{formatRelativeDate(row.status_changed_at)}</TD>
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const c = row.candidates ?? {}
+            const rowBg = activeTab === 'active' ? noShowRowBg(row) : ''
+            return (
+              <tr
+                key={row.id}
+                onClick={() => onSelect(c)}
+                className={`border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors ${rowBg}`}
+              >
+                <TD className="font-mono text-xs text-[#999] whitespace-nowrap">
+                  {row.applicant_id ?? '—'}
+                </TD>
+                <TD>
+                  <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{c.name ?? '—'}</span>
+                </TD>
+                <TD>
+                  <span className="text-[#666] block truncate max-w-[140px]">{c.skill_role ?? '—'}</span>
+                </TD>
+                <TD>
+                  <p className="text-xs font-medium text-[#0F0F12] truncate max-w-[170px]">
+                    {row.mandates?.clients?.name ?? '—'}
+                  </p>
+                  <p className="text-xs text-[#999] truncate max-w-[170px] mt-0.5">
+                    {row.mandates?.title ?? '—'}
+                  </p>
+                </TD>
+                <TD><StageBadge value={row.stage} /></TD>
+                <TD><StatusBadge value={row.status} /></TD>
+                <TD>
+                  <span className="text-[#666] block truncate max-w-[110px]">
+                    {row.linked_by_profile?.name ?? '—'}
+                  </span>
+                </TD>
+                <TD className="text-[#666]">
+                  {c.total_exp != null ? `${c.total_exp} yrs` : '—'}
+                </TD>
+                <TD className="text-xs text-[#999]">
+                  {formatRelativeDate(row.status_changed_at ?? row.linked_at)}
+                </TD>
+                {isTalentPool && (
+                  <TD onClick={(e) => e.stopPropagation()}>
+                    <button className="h-6 px-2.5 rounded text-xs font-medium text-[#5E6AD2] border border-[#5E6AD2]/30 hover:bg-[#5E6AD2]/10 transition">
+                      Re-assign
+                    </button>
+                  </TD>
+                )}
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
   )
 }
 
-// ─── page ──────────────────────────────────────────────────────────────────
+// ─── Unassigned table ───────────────────────────────────────────────────────
+
+function UnassignedTable({ rows, loading, onSelect }) {
+  if (loading) return <LoadingState />
+  if (rows.length === 0) return <EmptyState message="No unassigned candidates" />
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[760px] border-collapse">
+        <thead>
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+            <TH className="w-36">Candidate ID</TH>
+            <TH>Name</TH>
+            <TH>Role</TH>
+            <TH className="w-32">Added</TH>
+            <TH>Email</TH>
+            <TH>Recruiter</TH>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const bg = unassignedRowBg(row.created_at)
+            const age = daysSince(row.created_at)
+            return (
+              <tr
+                key={row.id}
+                onClick={() => onSelect(row)}
+                className={`border-b border-[#F0F0F4] hover:opacity-90 cursor-pointer transition-colors ${bg}`}
+              >
+                <TD className="font-mono text-xs text-[#999] whitespace-nowrap">{row.id}</TD>
+                <TD>
+                  <span className="font-medium text-[#0F0F12] block truncate max-w-[160px]">{row.name}</span>
+                </TD>
+                <TD>
+                  <span className="text-[#666] block truncate max-w-[140px]">{row.skill_role ?? '—'}</span>
+                </TD>
+                <TD>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-[#666]">{formatRelativeDate(row.created_at)}</span>
+                    {age >= 7 && (
+                      <span className={`text-xs font-medium ${age >= 14 ? 'text-red-600' : 'text-amber-600'}`}>
+                        {age}d
+                      </span>
+                    )}
+                  </div>
+                </TD>
+                <TD>
+                  <span className="text-xs text-[#666] block truncate max-w-[160px]">{row.email ?? '—'}</span>
+                </TD>
+                <TD>
+                  <span className="text-[#666] block truncate max-w-[110px]">{row.profiles?.name ?? '—'}</span>
+                </TD>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ─── All-candidates table ────────────────────────────────────────────────────
+
+function AllCandidatesTable({ rows, loading, onSelect }) {
+  if (loading) return <LoadingState />
+  if (rows.length === 0) return <EmptyState message="No candidates found" />
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[960px] border-collapse">
+        <thead>
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+            <TH className="w-36">Candidate ID</TH>
+            <TH>Name</TH>
+            <TH>Role</TH>
+            <TH>Client</TH>
+            <TH className="w-28">Stage</TH>
+            <TH className="w-36">Status</TH>
+            <TH>Recruiter</TH>
+            <TH className="w-20">Exp</TH>
+            <TH className="w-28">Added</TH>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const mc = latestMC(row)
+            return (
+              <tr
+                key={row.id}
+                onClick={() => onSelect(row)}
+                className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors"
+              >
+                <TD className="font-mono text-xs text-[#999] whitespace-nowrap">{row.id}</TD>
+                <TD>
+                  <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{row.name}</span>
+                </TD>
+                <TD>
+                  <span className="text-[#666] block truncate max-w-[140px]">{row.skill_role ?? '—'}</span>
+                </TD>
+                <TD>
+                  <span className="text-[#666] block truncate max-w-[120px]">{row.clients?.name ?? '—'}</span>
+                </TD>
+                <TD><StageBadge value={mc?.stage} /></TD>
+                <TD><StatusBadge value={mc?.status} /></TD>
+                <TD>
+                  <span className="text-[#666] block truncate max-w-[110px]">{row.profiles?.name ?? '—'}</span>
+                </TD>
+                <TD className="text-[#666]">
+                  {row.total_exp != null ? `${row.total_exp} yrs` : '—'}
+                </TD>
+                <TD className="text-xs text-[#999]">{formatRelativeDate(row.created_at)}</TD>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ─── page ────────────────────────────────────────────────────────────────────
 
 export default function Pipeline() {
   const profile = useProfile()
   const { session } = useAuth()
-  const [activeTab, setActiveTab] = useState('pipeline')
-  const [refreshToken, setRefreshToken] = useState(0)
+  const { isRecruiter, isAccountManager, isFounder } = useRole()
+
+  const [activeTab, setActiveTab] = useState('active')
+  const [amViewMode, setAmViewMode] = useState('my_submissions') // AM only
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [refreshToken, setRefreshToken] = useState(0)
 
   const [search, setSearch] = useState('')
   const [stageFilter, setStageFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [clientFilter, setClientFilter] = useState('')
   const [recruiterFilter, setRecruiterFilter] = useState('')
+
   const [selectedCandidate, setSelectedCandidate] = useState(null)
   const [pendingSelect, setPendingSelect] = useState(null)
 
-  const isManager = profile?.role !== 'recruiter'
+  const isMCTab = MC_TABS.has(activeTab)
 
-  // ── Data fetching ────────────────────────────────────────────────────────
+  // ── data fetch ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!profile || !session) return
 
     async function fetchData() {
       setLoading(true)
       setError(null)
-
       const userId = session.user.id
+      const role = profile.role
 
-      let baseQuery = supabase
-        .from('candidates')
-        .select(CANDIDATE_SELECT)
-        .order('status_changed_at', { ascending: false })
+      if (isMCTab) {
+        const statusList =
+          activeTab === 'active'      ? ACTIVE_STATUSES :
+          activeTab === 'talent_pool' ? TALENT_POOL_STATUSES :
+          PLACED_STATUSES
 
-      if (profile.role === 'recruiter') {
-        baseQuery = baseQuery.eq('recruiter_id', userId)
-      }
+        let query = supabase
+          .from('mandate_candidates')
+          .select(MC_SELECT)
+          .in('status', statusList)
+          .order('status_changed_at', { ascending: false, nullsFirst: false })
 
-      if (activeTab === 'pipeline' || activeTab === 'active') {
+        if (role === 'recruiter') {
+          query = query.eq('linked_by', userId)
+        } else if (role === 'account_manager') {
+          if (amViewMode === 'my_submissions') {
+            query = query.eq('linked_by', userId)
+          } else {
+            const { data: myMandates } = await supabase
+              .from('mandates')
+              .select('id')
+              .eq('am_id', userId)
+            const mandateIds = (myMandates ?? []).map((m) => m.id)
+            if (mandateIds.length === 0) {
+              setRows([])
+              setLoading(false)
+              return
+            }
+            query = query.in('mandate_id', mandateIds)
+          }
+        }
+
+        const { data, error: err } = await query
+        if (err) setError(err.message)
+        else setRows(data ?? [])
+
+      } else if (activeTab === 'unassigned') {
         const { data: linked } = await supabase
           .from('mandate_candidates')
           .select('candidate_id')
 
         const linkedIds = [...new Set((linked ?? []).map((r) => r.candidate_id))]
 
-        if (linkedIds.length === 0) {
-          setRows([])
-          setLoading(false)
-          return
+        let query = supabase
+          .from('candidates')
+          .select(UNASSIGNED_SELECT)
+          .order('created_at', { ascending: false })
+
+        if (role === 'recruiter') {
+          query = query.eq('recruiter_id', userId)
+        } else if (role === 'account_manager' && amViewMode === 'my_submissions') {
+          query = query.eq('recruiter_id', userId)
         }
 
-        let q = baseQuery.in('id', linkedIds)
-        if (activeTab === 'pipeline') {
-          q = q.in('stage', L2_PLUS_STAGES)
+        if (linkedIds.length > 0) {
+          query = query.not('id', 'in', `(${linkedIds.join(',')})`)
         }
 
-        const { data, error: fetchErr } = await q
-        if (fetchErr) setError(fetchErr.message)
+        const { data, error: err } = await query
+        if (err) setError(err.message)
         else setRows(data ?? [])
 
-      } else if (activeTab === 'unassigned') {
-        const [candidatesRes, linkedRes] = await Promise.all([
-          baseQuery,
-          supabase.from('mandate_candidates').select('candidate_id'),
-        ])
-
-        const linkedIdSet = new Set((linkedRes.data ?? []).map((r) => r.candidate_id))
-
-        if (candidatesRes.error) setError(candidatesRes.error.message)
-        else setRows((candidatesRes.data ?? []).filter((c) => !linkedIdSet.has(c.id)))
-
       } else {
-        // 'all'
-        const { data, error: fetchErr } = await baseQuery
-        if (fetchErr) setError(fetchErr.message)
+        // all
+        let query = supabase
+          .from('candidates')
+          .select(ALL_SELECT)
+          .order('created_at', { ascending: false })
+
+        if (role === 'recruiter') {
+          query = query.eq('recruiter_id', userId)
+        } else if (role === 'account_manager' && amViewMode === 'my_submissions') {
+          query = query.eq('recruiter_id', userId)
+        }
+
+        const { data, error: err } = await query
+        if (err) setError(err.message)
         else setRows(data ?? [])
       }
 
@@ -224,43 +456,66 @@ export default function Pipeline() {
     }
 
     fetchData()
-  }, [profile, session, activeTab, refreshToken]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile, session, activeTab, amViewMode, refreshToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Filter options derived from loaded data ──────────────────────────────
+  // ── filter options derived from rows ────────────────────────────────────────
   const stages = useMemo(
-    () => [...new Set(rows.map((r) => r.stage).filter(Boolean))].sort(),
-    [rows]
+    () => isMCTab ? [...new Set(rows.map((r) => r.stage).filter(Boolean))].sort() : [],
+    [rows, isMCTab]
   )
 
   const statusOptions = useMemo(() => {
-    if (!stageFilter) return [...new Set(Object.values(STAGE_STATUS_MAP).flat())]
-    return STAGE_STATUS_MAP[stageFilter] ?? []
-  }, [stageFilter])
+    if (!isMCTab) return []
+    if (stageFilter) return STAGE_STATUS_MAP[stageFilter] ?? []
+    return [...new Set(rows.map((r) => r.status).filter(Boolean))].sort()
+  }, [rows, isMCTab, stageFilter])
 
   const clients = useMemo(() => {
+    if (!isMCTab) return []
     const seen = new Map()
-    rows.forEach((r) => { if (r.clients?.id) seen.set(r.clients.id, r.clients) })
+    rows.forEach((r) => {
+      const c = r.mandates?.clients
+      if (c?.id) seen.set(c.id, c)
+    })
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [rows])
+  }, [rows, isMCTab])
 
   const recruiters = useMemo(() => {
     const seen = new Map()
-    rows.forEach((r) => { if (r.profiles?.id) seen.set(r.profiles.id, r.profiles) })
+    if (isMCTab) {
+      rows.forEach((r) => {
+        const p = r.linked_by_profile
+        if (p?.id) seen.set(p.id, { id: r.linked_by, name: p.name })
+      })
+    } else {
+      rows.forEach((r) => {
+        const p = r.profiles
+        if (p?.id) seen.set(r.recruiter_id, { id: r.recruiter_id, name: p.name })
+      })
+    }
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [rows])
+  }, [rows, isMCTab])
 
-  // ── Client-side filtering ────────────────────────────────────────────────
+  // ── client-side filtering ───────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return rows.filter((r) => {
-      if (q && !r.name?.toLowerCase().includes(q) && !r.skill_role?.toLowerCase().includes(q)) return false
-      if (stageFilter && r.stage !== stageFilter) return false
-      if (statusFilter && r.status !== statusFilter) return false
-      if (clientFilter && r.clients?.id !== clientFilter) return false
-      if (recruiterFilter && r.recruiter_id !== recruiterFilter) return false
+      if (isMCTab) {
+        const c = r.candidates ?? {}
+        if (q && !c.name?.toLowerCase().includes(q) && !c.skill_role?.toLowerCase().includes(q)) return false
+        if (stageFilter && r.stage !== stageFilter) return false
+        if (statusFilter && r.status !== statusFilter) return false
+        if (clientFilter && r.mandates?.clients?.id !== clientFilter) return false
+        if (recruiterFilter && r.linked_by !== recruiterFilter) return false
+      } else {
+        if (q && !r.name?.toLowerCase().includes(q) &&
+            !r.skill_role?.toLowerCase().includes(q) &&
+            !r.email?.toLowerCase().includes(q)) return false
+        if (recruiterFilter && r.recruiter_id !== recruiterFilter) return false
+      }
       return true
     })
-  }, [rows, search, stageFilter, statusFilter, clientFilter, recruiterFilter])
+  }, [rows, search, stageFilter, statusFilter, clientFilter, recruiterFilter, isMCTab])
 
   function handleTabChange(tab) {
     setActiveTab(tab)
@@ -271,12 +526,43 @@ export default function Pipeline() {
     setRecruiterFilter('')
   }
 
+  function handleSelect(candidate) {
+    if (!selectedCandidate) {
+      setSelectedCandidate(candidate)
+    } else if (selectedCandidate.id !== candidate.id) {
+      setPendingSelect(candidate)
+    }
+  }
+
   return (
     <AppShell title="Candidates">
       <div className="flex flex-col h-full">
 
+        {/* AM view-mode toggle */}
+        {isAccountManager && (
+          <div className="px-6 pt-3 pb-0 flex items-center gap-2">
+            <span className="text-xs text-[#999] font-medium mr-1">View:</span>
+            {[
+              { id: 'my_submissions', label: 'My Submissions' },
+              { id: 'my_mandates',   label: 'My Mandates' },
+            ].map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => setAmViewMode(id)}
+                className={`h-7 px-3 rounded-full text-xs font-medium transition ${
+                  amViewMode === id
+                    ? 'bg-[#5E6AD2] text-white'
+                    : 'bg-[#F0F0F4] text-[#666] hover:bg-[#E8E8EE]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Tab bar */}
-        <div className="px-6 border-b border-[#F0F0F4] bg-white flex items-center gap-1 shrink-0">
+        <div className="px-6 border-b border-[#F0F0F4] bg-white flex items-center gap-1 shrink-0 mt-1">
           {TABS.map(({ id, label }) => (
             <button
               key={id}
@@ -294,7 +580,6 @@ export default function Pipeline() {
 
         {/* Filter bar */}
         <div className="px-6 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
-          {/* Search */}
           <div className="relative">
             <svg
               className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none"
@@ -305,30 +590,34 @@ export default function Pipeline() {
             </svg>
             <input
               type="text"
-              placeholder="Search name or role…"
+              placeholder={isMCTab ? 'Search name or role…' : 'Search name, role or email…'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-56"
             />
           </div>
 
-          <SelectFilter
-            value={stageFilter}
-            onChange={(v) => { setStageFilter(v); setStatusFilter('') }}
-            placeholder="All stages"
-          >
-            {stages.map((s) => <option key={s} value={s}>{s}</option>)}
-          </SelectFilter>
+          {isMCTab && (
+            <>
+              <SelectFilter
+                value={stageFilter}
+                onChange={(v) => { setStageFilter(v); setStatusFilter('') }}
+                placeholder="All stages"
+              >
+                {stages.map((s) => <option key={s} value={s}>{s}</option>)}
+              </SelectFilter>
 
-          <SelectFilter value={statusFilter} onChange={setStatusFilter} placeholder="All statuses">
-            {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-          </SelectFilter>
+              <SelectFilter value={statusFilter} onChange={setStatusFilter} placeholder="All statuses">
+                {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+              </SelectFilter>
 
-          <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </SelectFilter>
+              <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
+                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </SelectFilter>
+            </>
+          )}
 
-          {isManager && (
+          {!isRecruiter && recruiters.length > 0 && (
             <SelectFilter value={recruiterFilter} onChange={setRecruiterFilter} placeholder="All recruiters">
               {recruiters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </SelectFilter>
@@ -336,7 +625,10 @@ export default function Pipeline() {
 
           {(search || stageFilter || statusFilter || clientFilter || recruiterFilter) && (
             <button
-              onClick={() => { setSearch(''); setStageFilter(''); setStatusFilter(''); setClientFilter(''); setRecruiterFilter('') }}
+              onClick={() => {
+                setSearch(''); setStageFilter(''); setStatusFilter('')
+                setClientFilter(''); setRecruiterFilter('')
+              }}
               className="text-xs text-[#5E6AD2] hover:underline ml-1"
             >
               Clear filters
@@ -357,26 +649,26 @@ export default function Pipeline() {
 
         {/* Table */}
         <div className="flex-1 overflow-auto">
-          <PipelineTable
-            rows={filtered}
-            loading={loading}
-            onSelect={(row) => {
-              if (!selectedCandidate) {
-                setSelectedCandidate(row)
-              } else if (selectedCandidate.id !== row.id) {
-                setPendingSelect(row)
-              }
-            }}
-          />
+          {isMCTab ? (
+            <MCTable
+              rows={filtered}
+              loading={loading}
+              onSelect={handleSelect}
+              activeTab={activeTab}
+            />
+          ) : activeTab === 'unassigned' ? (
+            <UnassignedTable rows={filtered} loading={loading} onSelect={handleSelect} />
+          ) : (
+            <AllCandidatesTable rows={filtered} loading={loading} onSelect={handleSelect} />
+          )}
         </div>
       </div>
 
-      {/* Detail panel */}
       <CandidatePanel
         candidate={selectedCandidate}
         onClose={() => setSelectedCandidate(null)}
-        onUpdate={(updated) => {
-          setSelectedCandidate((prev) => prev ? { ...prev, ...updated } : prev)
+        onUpdate={() => {
+          setSelectedCandidate(null)
           setRefreshToken((t) => t + 1)
         }}
         pendingSelect={pendingSelect}

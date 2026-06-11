@@ -9,14 +9,56 @@ export const NOTICE_PERIODS = [
 export const STAGES = ['CV', 'L1', 'L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining']
 
 export const STAGE_STATUS_MAP = {
-  'CV':           ['Internal Duplicate', 'Internal Reject', 'Shortlisted', 'FB Pending', 'Hold'],
-  'L1':           ['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
-  'L2':           ['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
-  'L3':           ['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
-  'Client Onsite':['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
-  'HR':           ['Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold', 'Reject'],
-  'Offer':        ['Offer Released', 'Offer Accepted', 'Offer Declined', 'Offer Revoked'],
-  'Joining':      ['Yet to Join', 'JYTR', 'Joining & Dropped', 'Invoice Raised'],
+  'CV': [
+    'Shortlisted', 'FB Pending', 'Hold', 'No Response',
+    'Internal Duplicate', 'Internal Reject', 'Reject', 'Hold — Closed', 'No Response — Closed',
+  ],
+  'L1': [
+    'Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold',
+    'Reject', 'No Show — Closed', 'Hold — Closed',
+  ],
+  'L2': [
+    'Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold',
+    'Reject', 'No Show — Closed', 'Hold — Closed',
+  ],
+  'L3': [
+    'Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold',
+    'Reject', 'No Show — Closed', 'Hold — Closed',
+  ],
+  'Client Onsite': [
+    'Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold',
+    'Reject', 'No Show — Closed', 'Hold — Closed',
+  ],
+  'HR': [
+    'Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold',
+    'Reject', 'No Show — Closed', 'Hold — Closed',
+  ],
+  'Offer': [
+    'Offer Released', 'Offer Accepted',
+    'Offer Declined', 'Offer Revoked',
+  ],
+  'Joining': [
+    'Yet to Join',
+    'Declined', 'Joined & Dropped',
+    'Joined', 'JYTR', 'Invoice Raised',
+  ],
 }
+
+// Tab placement — driven solely by mandate_candidates.status
+export const ACTIVE_STATUSES = [
+  'Shortlisted', 'FB Pending', 'Hold', 'No Response',
+  'Scheduled', 'Schedule Pending', 'No Show',
+  'Offer Released', 'Offer Accepted',
+  'Yet to Join',
+]
+
+export const TALENT_POOL_STATUSES = [
+  'Internal Duplicate', 'Internal Reject', 'Reject',
+  'Hold — Closed', 'No Response — Closed', 'No Show — Closed',
+  'Offer Declined', 'Offer Revoked',
+  'Declined', 'Joined & Dropped',
+]
+
+export const PLACED_STATUSES = ['Joined', 'JYTR', 'Invoice Raised']
 
 export const PASSING_YEARS = Array.from({ length: 2025 - 1985 + 1 }, (_, i) => 2025 - i)

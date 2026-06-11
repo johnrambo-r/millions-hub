@@ -57,32 +57,47 @@ function initEditFields(client) {
 // ─── Candidates tab ─────────────────────────────────────────────────────────
 
 function LinkedCandidates({ clientId }) {
-  const [candidates, setCandidates] = useState([])
+  const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!clientId) return
     setLoading(true)
+
+    // Get mandates for this client, then the latest mc record per candidate
     supabase
-      .from('candidates')
-      .select('id, name, skill_role, stage, status, email')
-      .eq('client_id', clientId)
-      .order('name')
+      .from('mandate_candidates')
+      .select(`
+        id, stage, status, status_changed_at,
+        candidates(id, name, skill_role, email),
+        mandates!inner(client_id)
+      `)
+      .eq('mandates.client_id', clientId)
+      .order('status_changed_at', { ascending: false })
       .then(({ data }) => {
-        setCandidates(data ?? [])
+        // Deduplicate by candidate_id — keep latest mc per candidate
+        const seen = new Map()
+        ;(data ?? []).forEach((mc) => {
+          if (!mc.candidates) return
+          const cid = mc.candidates.id
+          if (!seen.has(cid)) seen.set(cid, mc)
+        })
+        setRows([...seen.values()])
         setLoading(false)
       })
   }, [clientId])
 
   if (loading) return <p className="text-sm text-[#999]">Loading…</p>
-  if (candidates.length === 0) {
+  if (rows.length === 0) {
     return <p className="text-sm text-[#999]">No candidates linked to this client.</p>
   }
 
   return (
     <ul className="space-y-2">
-      {candidates.map((c) => (
-        <li key={c.id} className="rounded-lg border border-[#F0F0F4] px-4 py-3 bg-[#FAFAFA]">
+      {rows.map((mc) => {
+        const c = mc.candidates
+        return (
+        <li key={mc.id} className="rounded-lg border border-[#F0F0F4] px-4 py-3 bg-[#FAFAFA]">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-medium text-[#0F0F12] truncate">{c.name}</p>
@@ -90,12 +105,13 @@ function LinkedCandidates({ clientId }) {
               {c.email && <p className="text-xs text-[#999] mt-0.5 truncate">{c.email}</p>}
             </div>
             <div className="flex flex-col items-end gap-1 shrink-0">
-              <StageBadge value={c.stage} />
-              <StatusBadge value={c.status} />
+              <StageBadge value={mc.stage} />
+              <StatusBadge value={mc.status} />
             </div>
           </div>
         </li>
-      ))}
+        )
+      })}
     </ul>
   )
 }

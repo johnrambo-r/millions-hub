@@ -261,7 +261,7 @@ function CandidateRow({ mc, onRefresh }) {
   async function handleStatusChange(e) {
     const val = e.target.value
     setStatus(val)
-    const updates = { status: val || null }
+    const updates = { status: val || null, status_changed_at: new Date().toISOString() }
     if (val === 'Invoice Raised' && !isFinalized) {
       const approxNum = billingApprox !== '' ? parseFloat(billingApprox) : null
       updates.billing_value_final = approxNum

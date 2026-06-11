@@ -9,18 +9,28 @@ const STAGE_STYLES = {
   'Joining':       'bg-emerald-100 text-emerald-800',
 }
 
-const DEAD_STATUSES = new Set([
+// Talent pool / closed statuses render in muted red
+const TALENT_POOL_SET = new Set([
   'Internal Reject', 'Internal Duplicate', 'Reject',
-  'Offer Declined', 'Offer Revoked', 'Dropped Out', 'Joining & Dropped',
+  'Hold — Closed', 'No Response — Closed', 'No Show — Closed',
+  'Offer Declined', 'Offer Revoked',
+  'Declined', 'Joined & Dropped',
 ])
 
 const STATUS_STYLES = {
-  'FB Pending': 'bg-amber-50 text-amber-700',
-  'Scheduled':  'bg-indigo-50 text-indigo-700',
-  'Cleared':    'bg-emerald-50 text-emerald-700',
-  'Hold':       'bg-yellow-50 text-yellow-700',
-  'Offer Made': 'bg-blue-50 text-blue-800',
-  'Joined':     'bg-emerald-100 text-emerald-800',
+  'Shortlisted':      'bg-green-50 text-green-700',
+  'FB Pending':       'bg-amber-50 text-amber-700',
+  'Hold':             'bg-yellow-50 text-yellow-700',
+  'No Response':      'bg-gray-50 text-gray-600',
+  'Scheduled':        'bg-indigo-50 text-indigo-700',
+  'Schedule Pending': 'bg-sky-50 text-sky-700',
+  'No Show':          'bg-orange-50 text-orange-700',
+  'Offer Released':   'bg-blue-50 text-blue-700',
+  'Offer Accepted':   'bg-emerald-50 text-emerald-700',
+  'Yet to Join':      'bg-teal-50 text-teal-700',
+  'Joined':           'bg-emerald-100 text-emerald-800',
+  'JYTR':             'bg-emerald-50 text-emerald-700',
+  'Invoice Raised':   'bg-blue-100 text-blue-800',
 }
 
 const BASE = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap'
@@ -31,7 +41,7 @@ export function StageBadge({ value }) {
 }
 
 export function StatusBadge({ value }) {
-  const cls = DEAD_STATUSES.has(value)
+  const cls = TALENT_POOL_SET.has(value)
     ? 'bg-red-50 text-red-700'
     : (STATUS_STYLES[value] ?? 'bg-gray-100 text-gray-600')
   return <span className={`${BASE} ${cls}`}>{value ?? '—'}</span>
