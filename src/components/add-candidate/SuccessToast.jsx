@@ -14,15 +14,16 @@ function CloseIcon() {
   )
 }
 
-export default function SuccessToast({ candidateId, onDismiss }) {
-  if (!candidateId) return null
+export default function SuccessToast({ candidateId, message, onDismiss }) {
+  const text = message ?? (candidateId ? `${candidateId} added successfully` : null)
+  if (!text) return null
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl px-5 py-3.5 shadow-xl"
       style={{ backgroundColor: '#0F0F12' }}>
       <CheckIcon />
       <span className="text-sm font-medium text-white">
-        {candidateId} added successfully
+        {text}
       </span>
       <button
         onClick={onDismiss}

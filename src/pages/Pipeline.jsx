@@ -3,6 +3,8 @@ import { useLocation } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import { StageBadge, StatusBadge } from '../components/pipeline/StageBadge'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
+import AssignMandateModal from '../components/AssignMandateModal'
+import SuccessToast from '../components/add-candidate/SuccessToast'
 import { useProfile } from '../hooks/useProfile'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -220,13 +222,13 @@ function MCTable({ rows, loading, onSelect, activeTab }) {
 
 // ─── Unassigned table ───────────────────────────────────────────────────────
 
-function UnassignedTable({ rows, loading, onSelect }) {
+function UnassignedTable({ rows, loading, onSelect, onAssign }) {
   if (loading) return <LoadingState />
   if (rows.length === 0) return <EmptyState message="No unassigned candidates" />
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] border-collapse">
+      <table className="w-full min-w-[820px] border-collapse">
         <thead>
           <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
             <TH className="w-36">Candidate ID</TH>
@@ -235,6 +237,7 @@ function UnassignedTable({ rows, loading, onSelect }) {
             <TH className="w-32">Added</TH>
             <TH>Email</TH>
             <TH>Recruiter</TH>
+            <TH className="w-24"></TH>
           </tr>
         </thead>
         <tbody>
@@ -269,6 +272,14 @@ function UnassignedTable({ rows, loading, onSelect }) {
                 </TD>
                 <TD>
                   <span className="text-[#666] block truncate max-w-[110px]">{row.profiles?.name ?? '—'}</span>
+                </TD>
+                <TD onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => onAssign({ id: row.id, name: row.name })}
+                    className="h-6 px-2.5 rounded text-xs font-medium text-[#5E6AD2] border border-[#5E6AD2]/30 hover:bg-[#5E6AD2]/10 transition"
+                  >
+                    Assign
+                  </button>
                 </TD>
               </tr>
             )
@@ -361,6 +372,8 @@ export default function Pipeline() {
 
   const [selectedCandidate, setSelectedCandidate] = useState(null)
   const [pendingSelect, setPendingSelect] = useState(null)
+  const [assignTarget, setAssignTarget] = useState(null)  // { id, name }
+  const [assignToast, setAssignToast] = useState('')
 
   const isMCTab = MC_TABS.has(activeTab)
 
@@ -673,7 +686,12 @@ export default function Pipeline() {
               activeTab={activeTab}
             />
           ) : activeTab === 'unassigned' ? (
-            <UnassignedTable rows={filtered} loading={loading} onSelect={handleSelect} />
+            <UnassignedTable
+              rows={filtered}
+              loading={loading}
+              onSelect={handleSelect}
+              onAssign={setAssignTarget}
+            />
           ) : (
             <AllCandidatesTable rows={filtered} loading={loading} onSelect={handleSelect} />
           )}
@@ -693,6 +711,25 @@ export default function Pipeline() {
           setPendingSelect(null)
         }}
         onPendingCancelled={() => setPendingSelect(null)}
+      />
+
+      {assignTarget && (
+        <AssignMandateModal
+          candidateId={assignTarget.id}
+          candidateName={assignTarget.name}
+          onClose={() => setAssignTarget(null)}
+          onAssigned={(appId) => {
+            setAssignTarget(null)
+            setAssignToast(appId)
+            setTimeout(() => setAssignToast(''), 4000)
+            setRefreshToken((t) => t + 1)
+          }}
+        />
+      )}
+
+      <SuccessToast
+        message={assignToast ? `Assigned as ${assignToast}` : null}
+        onDismiss={() => setAssignToast('')}
       />
     </AppShell>
   )

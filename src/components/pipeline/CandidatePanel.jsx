@@ -6,6 +6,7 @@ import {
   QUALIFICATIONS, PASSING_YEARS, NOTICE_PERIODS,
 } from '../../lib/candidateConstants'
 import UnsavedChangesModal from '../UnsavedChangesModal'
+import { generateApplicantId } from '../../lib/generateApplicantId'
 
 function Field({ label, children, colSpan2 = false }) {
   return (
@@ -67,9 +68,10 @@ function LinkMandateModal({ candidateId, linkedMandateIds, userId, onClose, onLi
   async function handleLink(mandate) {
     setLinking(mandate.id)
     setError('')
+    const applicantId = await generateApplicantId()
     const { error } = await supabase
       .from('mandate_candidates')
-      .insert({ mandate_id: mandate.id, candidate_id: candidateId, linked_by: userId })
+      .insert({ mandate_id: mandate.id, candidate_id: candidateId, linked_by: userId, applicant_id: applicantId })
     setLinking(null)
     if (error) setError(error.message)
     else onLinked()

@@ -5,6 +5,7 @@ import FormSection from '../components/add-candidate/FormSection'
 import FormField, { inputCls, inputReadOnly } from '../components/add-candidate/FormField'
 import DuplicateModal from '../components/add-candidate/DuplicateModal'
 import SuccessToast from '../components/add-candidate/SuccessToast'
+import AssignMandateModal from '../components/AssignMandateModal'
 import { useProfile } from '../hooks/useProfile'
 import { useClients } from '../hooks/useClients'
 import { useNextCandidateId } from '../hooks/useNextCandidateId'
@@ -69,6 +70,45 @@ function Select({ value, onChange, error, disabled, placeholder, children }) {
   )
 }
 
+// ─── post-add prompt ───────────────────────────────────────────────────────
+
+function PostAddPromptModal({ candidateId, onAssign, onSkip }) {
+  if (!candidateId) return null
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm px-6 py-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+            <svg viewBox="0 0 16 16" fill="none" stroke="#1D8A5E" strokeWidth="1.75" className="w-4 h-4">
+              <path d="M3 8l3.5 3.5L13 4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-[#0F0F12]">Candidate added</p>
+            <p className="font-mono text-xs text-[#999] mt-0.5">{candidateId}</p>
+          </div>
+        </div>
+        <p className="text-sm text-[#666] mb-5">Assign to a mandate now?</p>
+        <div className="flex items-center justify-end gap-3">
+          <button
+            onClick={onSkip}
+            className="h-9 px-4 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition"
+          >
+            Skip
+          </button>
+          <button
+            onClick={onAssign}
+            className="h-9 px-4 rounded-lg text-sm font-semibold text-white transition hover:opacity-90"
+            style={{ backgroundColor: '#5E6AD2' }}
+          >
+            Assign to mandate →
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── page ──────────────────────────────────────────────────────────────────
 
 export default function AddCandidate() {
@@ -81,7 +121,9 @@ export default function AddCandidate() {
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [duplicates, setDuplicates] = useState(null)
-  const [toast, setToast] = useState('')
+  const [postAdd, setPostAdd] = useState(null)       // { id, name } — drives PostAddPromptModal
+  const [assignTarget, setAssignTarget] = useState(null) // { id, name } — drives AssignMandateModal
+  const [appIdToast, setAppIdToast] = useState('')
   const [resumeFile, setResumeFile] = useState(null)
   const [fileKey, setFileKey] = useState(0)
   const fileInputRef = useRef(null)
@@ -193,6 +235,7 @@ export default function AddCandidate() {
     }
 
     const addedId = candidateId
+    const addedName = form.name.trim()
     setForm(INITIAL)
     setErrors({})
     setResumeFile(null)
@@ -200,8 +243,7 @@ export default function AddCandidate() {
     await regenerate()
     setSubmitting(false)
 
-    setToast(addedId)
-    setTimeout(() => setToast(''), 4000)
+    setPostAdd({ id: addedId, name: addedName })
     return { success: true }
   }
 
@@ -213,6 +255,12 @@ export default function AddCandidate() {
   function handleUseExisting(candidate) {
     setDuplicates(null)
     navigate('/pipeline', { state: { openCandidateId: candidate.id } })
+  }
+
+  function handleAssigned(appId) {
+    setAssignTarget(null)
+    setAppIdToast(appId)
+    setTimeout(() => setAppIdToast(''), 4000)
   }
 
   return (
@@ -511,7 +559,25 @@ export default function AddCandidate() {
         onUseExisting={handleUseExisting}
       />
 
-      <SuccessToast candidateId={toast} onDismiss={() => setToast('')} />
+      <PostAddPromptModal
+        candidateId={postAdd?.id}
+        onAssign={() => { setAssignTarget(postAdd); setPostAdd(null) }}
+        onSkip={() => setPostAdd(null)}
+      />
+
+      {assignTarget && (
+        <AssignMandateModal
+          candidateId={assignTarget.id}
+          candidateName={assignTarget.name}
+          onClose={() => setAssignTarget(null)}
+          onAssigned={handleAssigned}
+        />
+      )}
+
+      <SuccessToast
+        message={appIdToast ? `Assigned as ${appIdToast}` : null}
+        onDismiss={() => setAppIdToast('')}
+      />
     </AppShell>
   )
 }
