@@ -254,9 +254,10 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
                 id: c.id,
                 name: c.name,
                 isReassignment: true,
+                oldMcId: row.id,
                 oldJobId: row.mandates?.job_id ?? null,
               })}
-              className="h-6 px-2.5 rounded text-xs font-medium text-[#5E6AD2] border border-[#5E6AD2]/30 hover:bg-[#5E6AD2]/10 transition"
+              className="h-6 px-2.5 rounded text-xs font-medium whitespace-nowrap text-[#5E6AD2] border border-[#5E6AD2]/30 hover:bg-[#5E6AD2]/10 transition"
             >
               Re-assign
             </button>
@@ -913,7 +914,7 @@ export default function Pipeline() {
           candidateId={assignTarget.id}
           candidateName={assignTarget.name}
           onClose={() => setAssignTarget(null)}
-          onAssigned={(appId, newMandate) => {
+          onAssigned={async (appId, newMandate) => {
             if (assignTarget.isReassignment) {
               logActivity({
                 candidateId: assignTarget.id,
@@ -924,6 +925,12 @@ export default function Pipeline() {
                 oldValue: assignTarget.oldJobId,
                 newValue: newMandate.jobId,
               })
+              // Null out the old mc record's status so it no longer matches
+              // the TALENT_POOL_STATUSES filter and drops off the Talent Pool tab.
+              await supabase
+                .from('mandate_candidates')
+                .update({ status: null })
+                .eq('id', assignTarget.oldMcId)
               setAssignToast(`Re-assigned as ${appId}`)
             } else {
               setAssignToast(`Assigned as ${appId}`)
