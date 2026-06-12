@@ -1,16 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import { supabase } from '../lib/supabase'
 import UnsavedChangesModal from '../components/UnsavedChangesModal'
 import useRole from '../hooks/useRole'
 import { useAuth } from '../context/AuthContext'
-import { STAGES, STAGE_STATUS_MAP } from '../lib/candidateConstants'
+import {
+  STAGES, STAGE_STATUS_MAP, ACTIVE_STATUSES, PLACED_STATUSES,
+} from '../lib/candidateConstants'
 import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineStageStatus'
 import { StageBadge, StatusBadge as CandidateStatusBadge } from '../components/pipeline/StageBadge'
 import { logActivity } from '../lib/activityLog'
 
-// ─── Constants ──────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_STYLES = {
   active:    'bg-green-50 text-green-700',
@@ -22,18 +24,12 @@ const STATUS_LABELS = {
   active: 'Active', on_hold: 'On Hold', closed: 'Closed', cancelled: 'Cancelled',
 }
 const PRIORITY_STYLES = {
-  high: 'bg-red-50 text-red-700', medium: 'bg-amber-50 text-amber-700', low: 'bg-gray-100 text-gray-500',
+  high:   'bg-red-50 text-red-700',
+  medium: 'bg-amber-50 text-amber-700',
+  low:    'bg-gray-100 text-gray-500',
 }
-const CLIENT_RESPONSE_STYLES = {
-  shortlisted: 'bg-green-50 text-green-700',
-  rejected:    'bg-red-50 text-red-700',
-  on_hold:     'bg-amber-50 text-amber-700',
-}
-const CLIENT_RESPONSE_LABELS = {
-  shortlisted: 'Shortlisted', rejected: 'Rejected', on_hold: 'On Hold',
-}
-const WORK_MODE_LABELS    = { onsite: 'Onsite', hybrid: 'Hybrid', remote: 'Remote' }
-const EMPLOYMENT_LABELS   = { full_time: 'Full-time', contract: 'Contract', contract_to_hire: 'Contract to Hire' }
+const WORK_MODE_LABELS  = { onsite: 'Onsite', hybrid: 'Hybrid', remote: 'Remote' }
+const EMPLOYMENT_LABELS = { full_time: 'Full-time', contract: 'Contract', contract_to_hire: 'Contract to Hire' }
 
 const EDITABLE_FIELDS = [
   'title', 'status', 'priority', 'num_positions',
@@ -42,13 +38,80 @@ const EDITABLE_FIELDS = [
   'internal_notes', 'jd_text', 'am_id',
 ]
 
+const STAGE_ORDER       = Object.fromEntries(STAGES.map((s, i) => [s, i]))
+const PIPELINE_STAGES   = new Set(['L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining'])
+const INTERVIEW_STAGES  = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
+const ACTIVE_STATUS_SET = new Set(ACTIVE_STATUSES)
+const PLACED_STATUS_SET = new Set(PLACED_STATUSES)
+
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
-// ─── Shared small components ─────────────────────────────────────────────────
+// Row grid — shared between header and data rows
+const ROW_GRID = 'grid gap-x-3 px-5 py-3'
+const ROW_COLS = 'grid-cols-[minmax(140px,2fr)_auto_auto_minmax(80px,1fr)_auto_80px_32px]'
 
-function Field({ label, children, colSpan2 = false }) {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function daysInStage(mc) {
+  const ref = mc.status_changed_at ?? mc.linked_at
+  if (!ref) return 0
+  return Math.floor((Date.now() - new Date(ref)) / 86400000)
+}
+
+function daysColor(days) {
+  if (days >= 14) return 'text-red-600 bg-red-50'
+  if (days >= 7)  return 'text-amber-600 bg-amber-50'
+  return 'text-[#666] bg-[#F5F5F8]'
+}
+
+function formatDate(str) {
+  if (!str) return '—'
+  return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function formatDateShort(str) {
+  if (!str) return null
+  return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+function formatRelDate(str) {
+  if (!str) return '—'
+  const days = Math.floor((Date.now() - new Date(str)) / 86400000)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7)  return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+function formatTime(str) {
+  if (!str) return ''
+  const [h, m] = str.split(':').map(Number)
+  if (isNaN(h)) return str
+  const period = h >= 12 ? 'PM' : 'AM'
+  return `${h % 12 || 12}:${String(m ?? 0).padStart(2, '0')} ${period}`
+}
+
+function formatMoney(val) {
+  if (val == null) return null
+  const n = Number(val)
+  if (n >= 100000) return `₹${(n / 100000 % 1 === 0 ? n / 100000 : (n / 100000).toFixed(1))}L`
+  if (n >= 1000)   return `₹${Math.round(n / 1000)}K`
+  return `₹${n}`
+}
+
+function initEditFields(mandate) {
+  const fields = {}
+  EDITABLE_FIELDS.forEach((k) => { fields[k] = mandate?.[k] ?? '' })
+  return fields
+}
+
+// ─── Shared small components ──────────────────────────────────────────────────
+
+function Field({ label, children, span = 1 }) {
+  const spanCls = span === 2 ? 'col-span-2' : span === 3 ? 'col-span-3' : ''
   return (
-    <div className={colSpan2 ? 'col-span-2' : ''}>
+    <div className={spanCls}>
       <dt className="text-xs font-medium text-[#999] uppercase tracking-wide mb-0.5">{label}</dt>
       <dd className="text-sm text-[#0F0F12] break-words">{children || '—'}</dd>
     </div>
@@ -64,8 +127,8 @@ function EditField({ label, children, colSpan2 = false }) {
   )
 }
 
-function StatusBadge({ value }) {
-  if (!value) return <span className="text-sm text-[#999]">—</span>
+function MandateStatusBadge({ value }) {
+  if (!value) return null
   const cls = STATUS_STYLES[value] ?? 'bg-gray-100 text-gray-500'
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${cls}`}>
@@ -75,7 +138,7 @@ function StatusBadge({ value }) {
 }
 
 function PriorityBadge({ value }) {
-  if (!value) return <span className="text-sm text-[#999]">—</span>
+  if (!value) return null
   const cls = PRIORITY_STYLES[value] ?? 'bg-gray-100 text-gray-500'
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${cls}`}>
@@ -84,22 +147,7 @@ function PriorityBadge({ value }) {
   )
 }
 
-function ClientResponseBadge({ value }) {
-  if (!value) return <span className="text-xs text-[#999]">—</span>
-  const cls = CLIENT_RESPONSE_STYLES[value] ?? 'bg-gray-100 text-gray-500'
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${cls}`}>
-      {CLIENT_RESPONSE_LABELS[value] ?? value}
-    </span>
-  )
-}
-
-function formatDate(str) {
-  if (!str) return '—'
-  return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-// ─── JD collapsible ──────────────────────────────────────────────────────────
+// ─── JD collapsible ───────────────────────────────────────────────────────────
 
 function JDTextCollapsible({ text }) {
   const [expanded, setExpanded] = useState(false)
@@ -111,10 +159,7 @@ function JDTextCollapsible({ text }) {
     <div>
       <p className="text-sm text-[#666] whitespace-pre-wrap leading-relaxed">{displayed}</p>
       {isLong && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="mt-1.5 text-xs text-[#5E6AD2] hover:underline"
-        >
+        <button onClick={() => setExpanded(!expanded)} className="mt-1.5 text-xs text-[#5E6AD2] hover:underline">
           {expanded ? 'Show less' : 'Show more'}
         </button>
       )}
@@ -122,17 +167,17 @@ function JDTextCollapsible({ text }) {
   )
 }
 
-// ─── Link Candidate Modal ────────────────────────────────────────────────────
+// ─── Link Candidate Modal ─────────────────────────────────────────────────────
 
 function LinkCandidateModal({ mandateId, linkedIds, onLink, onClose }) {
-  const [search, setSearch]     = useState('')
-  const [results, setResults]   = useState([])
+  const [search, setSearch]       = useState('')
+  const [results, setResults]     = useState([])
   const [searching, setSearching] = useState(false)
-  const [linking, setLinking]   = useState(null)
+  const [linking, setLinking]     = useState(null)
 
   useEffect(() => {
     if (!search.trim()) { setResults([]); return }
-    const timer = setTimeout(async () => {
+    const t = setTimeout(async () => {
       setSearching(true)
       const { data } = await supabase
         .from('candidates')
@@ -142,7 +187,7 @@ function LinkCandidateModal({ mandateId, linkedIds, onLink, onClose }) {
       setResults(data ?? [])
       setSearching(false)
     }, 300)
-    return () => clearTimeout(timer)
+    return () => clearTimeout(t)
   }, [search])
 
   async function handleLink(candidate) {
@@ -168,8 +213,7 @@ function LinkCandidateModal({ mandateId, linkedIds, onLink, onClose }) {
         <div className="px-6 py-4 shrink-0">
           <div className="relative">
             <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="6.5" cy="6.5" r="4.5" />
-              <path d="M10.5 10.5l3 3" strokeLinecap="round" />
+              <circle cx="6.5" cy="6.5" r="4.5" /><path d="M10.5 10.5l3 3" strokeLinecap="round" />
             </svg>
             <input
               type="text"
@@ -184,9 +228,7 @@ function LinkCandidateModal({ mandateId, linkedIds, onLink, onClose }) {
         <div className="flex-1 overflow-y-auto px-6 pb-6">
           {!search && <p className="text-sm text-[#999]">Type a name to search candidates.</p>}
           {searching && <p className="text-sm text-[#999]">Searching…</p>}
-          {!searching && search && results.length === 0 && (
-            <p className="text-sm text-[#999]">No candidates found.</p>
-          )}
+          {!searching && search && results.length === 0 && <p className="text-sm text-[#999]">No candidates found.</p>}
           <ul className="space-y-2">
             {results.map((c) => {
               const already = linkedIds.has(c.id)
@@ -219,377 +261,59 @@ function LinkCandidateModal({ mandateId, linkedIds, onLink, onClose }) {
   )
 }
 
-// ─── Candidate row (inline stage/status/billing) ─────────────────────────────
+// ─── Section 1: Snapshot strip ────────────────────────────────────────────────
 
-const inputCls = 'h-8 w-full rounded-md border border-[#F0F0F4] bg-white px-2 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
-
-const INTERVIEW_STAGES = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
-
-function CandidateRow({ mc, onRefresh }) {
-  const { isFounder } = useRole()
-  const { session } = useAuth()
-  const [stage, setStage] = useState(mc.stage ?? '')
-  const [status, setStatus] = useState(mc.status ?? '')
-  const [billingApprox, setBillingApprox] = useState(
-    mc.billing_value_approx != null ? String(mc.billing_value_approx) : ''
-  )
-  const [billingFinal, setBillingFinal] = useState(mc.billing_value_final ?? null)
-  const [billingFinalEditing, setBillingFinalEditing] = useState(false)
-  const [billingFinalDraft, setBillingFinalDraft] = useState('')
-  const [joiningDate, setJoiningDate] = useState(mc.date_of_joining ?? '')
-  const [saving, setSaving] = useState(false)
-  const [unlinkConfirm, setUnlinkConfirm] = useState(false)
-  const [unlinking, setUnlinking] = useState(false)
-  const [prompt, setPrompt] = useState(null)
-  const billingTimer = useRef(null)
-
-  const showBilling  = stage === 'Offer' || stage === 'Joining'
-  const isFinalized  = billingFinal != null
-  const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
-  const changedBy    = session?.user?.id
-
-  async function save(updates, triggerRefresh = false) {
-    setSaving(true)
-    const { error } = await supabase
-      .from('mandate_candidates')
-      .update(updates)
-      .eq('id', mc.id)
-    setSaving(false)
-    if (!error && triggerRefresh) onRefresh()
-  }
-
-  async function handleStageChange(newStage) {
-    const oldStage  = stage
-    const oldStatus = status
-    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
-
-    setStage(newStage)
-    setStatus(newStatus ?? '')
-
-    await save({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
-
-    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'stage', oldValue: oldStage, newValue: newStage })
-    if (oldStatus !== newStatus) {
-      await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+function SnapshotStrip({ mandateCandidates: mcs, mandate }) {
+  const snap = useMemo(() => {
+    let cvsSent = 0, inPipeline = 0, interviewsScheduled = 0, offersOut = 0, placed = 0
+    for (const mc of mcs) {
+      const { stage, status } = mc
+      if (stage === 'CV') cvsSent++
+      if (PIPELINE_STAGES.has(stage) && ACTIVE_STATUS_SET.has(status)) inPipeline++
+      if (INTERVIEW_STAGES.has(stage) && status === 'Scheduled') interviewsScheduled++
+      if (stage === 'Offer' && (status === 'Offer Released' || status === 'Offer Accepted')) offersOut++
+      if (PLACED_STATUS_SET.has(status)) placed++
     }
+    const daysOpen = mandate?.created_at
+      ? Math.floor((Date.now() - new Date(mandate.created_at)) / 86400000)
+      : null
+    return { total: mcs.length, cvsSent, inPipeline, interviewsScheduled, offersOut, placed, daysOpen }
+  }, [mcs, mandate])
 
-    if (INTERVIEW_STAGES.has(newStage)) {
-      setPrompt({ type: 'interview' })
-    } else if (newStage === 'Offer') {
-      setPrompt({ type: 'offer' })
-    } else if (newStage === 'Joining') {
-      setPrompt({ type: 'joining' })
-    } else {
-      onRefresh()
-    }
-  }
-
-  async function handleStatusChange(newStatus) {
-    const oldStatus = status
-    setStatus(newStatus)
-
-    const updates = { status: newStatus, status_changed_at: new Date().toISOString() }
-    if (newStatus === 'Invoice Raised' && !isFinalized) {
-      const approxNum = billingApprox !== '' ? parseFloat(billingApprox) : null
-      updates.billing_value_final = approxNum
-      setBillingFinal(approxNum)
-    }
-
-    await save(updates, true)
-    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-  }
-
-  function handleBillingChange(e) {
-    if (isFinalized) return
-    const val = e.target.value
-    setBillingApprox(val)
-    clearTimeout(billingTimer.current)
-    billingTimer.current = setTimeout(async () => {
-      await save({ billing_value_approx: val !== '' ? parseFloat(val) : null })
-    }, 600)
-  }
-
-  function handleBillingFinalEditStart() {
-    setBillingFinalDraft(billingFinal != null ? String(billingFinal) : '')
-    setBillingFinalEditing(true)
-  }
-
-  async function handleBillingFinalBlur() {
-    const newVal = billingFinalDraft !== '' ? parseFloat(billingFinalDraft) : null
-    setBillingFinal(newVal)
-    setBillingFinalEditing(false)
-    await save({ billing_value_final: newVal })
-  }
-
-  async function handleUnlink() {
-    setUnlinking(true)
-    const { error } = await supabase
-      .from('mandate_candidates')
-      .delete()
-      .eq('id', mc.id)
-    setUnlinking(false)
-    if (!error) onRefresh()
-  }
+  const tiles = [
+    { label: 'Total Assigned', value: snap.total,               accent: 'text-[#0F0F12]' },
+    { label: 'CVs Sent',       value: snap.cvsSent,             accent: 'text-indigo-600' },
+    { label: 'In Pipeline',    value: snap.inPipeline,          accent: 'text-violet-600' },
+    { label: 'Interviews',     value: snap.interviewsScheduled, accent: 'text-amber-600' },
+    { label: 'Offers Out',     value: snap.offersOut,           accent: 'text-blue-600' },
+    { label: 'Placed',         value: snap.placed,              accent: 'text-emerald-600' },
+    {
+      label: 'Days Open',
+      value: snap.daysOpen ?? '—',
+      accent: snap.daysOpen >= 60 ? 'text-red-600' : snap.daysOpen >= 30 ? 'text-amber-600' : 'text-[#0F0F12]',
+    },
+  ]
 
   return (
-    <>
-      <li className="rounded-lg border border-[#F0F0F4] px-4 py-3 bg-[#FAFAFA]">
-        {unlinkConfirm ? (
-          <div className="py-1">
-            <p className="text-sm text-[#0F0F12] mb-3">
-              Are you sure you want to unlink <span className="font-medium">{mc.candidate?.name ?? 'this candidate'}</span> from this mandate?
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleUnlink}
-                disabled={unlinking}
-                className="h-7 px-3 rounded-lg text-xs font-semibold text-white bg-red-600 hover:opacity-90 disabled:opacity-50 transition"
-              >
-                {unlinking ? 'Unlinking…' : 'Confirm'}
-              </button>
-              <button
-                onClick={() => setUnlinkConfirm(false)}
-                disabled={unlinking}
-                className="h-7 px-3 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition"
-              >
-                Cancel
-              </button>
-            </div>
+    <div className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+      <div className="flex items-stretch overflow-x-auto">
+        {tiles.map((t, i) => (
+          <div
+            key={t.label}
+            className={`flex flex-col items-center justify-center px-5 py-3 shrink-0 ${i > 0 ? 'border-l border-[#EAEAF0]' : ''}`}
+          >
+            <span className={`text-2xl font-bold leading-tight tabular-nums ${t.accent}`}>{t.value}</span>
+            <span className="text-[10px] font-medium text-[#999] uppercase tracking-wider mt-0.5 whitespace-nowrap">{t.label}</span>
           </div>
-        ) : (
-          <>
-            <div className="flex items-start justify-between gap-2 mb-2.5">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
-                {mc.candidate?.skill_role && (
-                  <p className="text-xs text-[#666] mt-0.5 truncate">{mc.candidate.skill_role}</p>
-                )}
-                <p className="text-xs text-[#999] mt-0.5">Linked {formatDate(mc.linked_at)}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {saving && <span className="text-xs text-[#999]">Saving…</span>}
-                <button
-                  onClick={() => setUnlinkConfirm(true)}
-                  className="h-7 px-2.5 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#999] hover:border-red-300 hover:text-red-600 transition"
-                >
-                  Unlink
-                </button>
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${mc.submitted_to_client ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {mc.submitted_to_client ? 'Submitted' : 'Not submitted'}
-                </span>
-                {mc.client_response && <ClientResponseBadge value={mc.client_response} />}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <div>
-                <p className="text-xs text-[#999] mb-1">Stage</p>
-                <InlineDropdown
-                  badge={<StageBadge value={stage || null} />}
-                  options={STAGES}
-                  onSelect={handleStageChange}
-                />
-              </div>
-              <div>
-                <p className="text-xs text-[#999] mb-1">Status</p>
-                <InlineDropdown
-                  badge={<CandidateStatusBadge value={status || null} />}
-                  options={statusOptions}
-                  onSelect={handleStatusChange}
-                  disabled={!stage}
-                />
-              </div>
-            </div>
-
-            {showBilling && (
-              <div className="mt-2">
-                <label className="text-xs text-[#999] mb-1 block">
-                  {isFinalized ? 'Billing Value (₹) — final, locked' : 'Billing Value (₹)'}
-                </label>
-                {isFinalized && billingFinalEditing ? (
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={billingFinalDraft}
-                    onChange={(e) => setBillingFinalDraft(e.target.value)}
-                    onBlur={handleBillingFinalBlur}
-                    autoFocus
-                    className={inputCls}
-                  />
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={isFinalized ? (billingFinal ?? '') : billingApprox}
-                      onChange={handleBillingChange}
-                      readOnly={isFinalized}
-                      placeholder="e.g. 1150000"
-                      className={`${inputCls} ${isFinalized ? 'bg-[#F5F5F8] text-[#666] cursor-not-allowed' : ''}`}
-                    />
-                    {isFinalized && isFounder && (
-                      <button
-                        onClick={handleBillingFinalEditStart}
-                        title="Edit final billing value"
-                        className="shrink-0 text-[#999] hover:text-[#5E6AD2] transition-colors"
-                      >
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
-                          <path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {stage === 'Joining' && (
-              <div className="mt-2">
-                <label className="text-xs text-[#999] mb-1 block">Date of Joining</label>
-                <input
-                  type="date"
-                  value={joiningDate}
-                  onChange={(e) => setJoiningDate(e.target.value)}
-                  onBlur={() => save({ date_of_joining: joiningDate || null })}
-                  className={inputCls}
-                />
-              </div>
-            )}
-          </>
-        )}
-      </li>
-      {prompt && (
-        <StagePromptModal
-          type={prompt.type}
-          mcId={mc.id}
-          supabaseClient={supabase}
-          onClose={() => { setPrompt(null); onRefresh() }}
-        />
-      )}
-    </>
-  )
-}
-
-// ─── Candidates tab ──────────────────────────────────────────────────────────
-
-function CandidatesTab({ mandateId, mandateCandidates, loading, onRefresh }) {
-  const [showModal, setShowModal] = useState(false)
-  const linkedIds = new Set(mandateCandidates.map((mc) => mc.candidate_id))
-
-  if (loading) return <p className="text-sm text-[#999]">Loading candidates…</p>
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-xs text-[#999]">
-          {mandateCandidates.length} candidate{mandateCandidates.length !== 1 ? 's' : ''} linked
-        </p>
-        <button
-          onClick={() => setShowModal(true)}
-          className="h-8 px-3 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 flex items-center gap-1.5"
-          style={{ backgroundColor: '#5E6AD2' }}
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-            <path d="M8 3v10M3 8h10" strokeLinecap="round" />
-          </svg>
-          Link Candidate
-        </button>
+        ))}
       </div>
-
-      {mandateCandidates.length === 0 ? (
-        <p className="text-sm text-[#999]">No candidates linked to this mandate yet.</p>
-      ) : (
-        <ul className="space-y-2">
-          {mandateCandidates.map((mc) => (
-            <CandidateRow key={mc.id} mc={mc} onRefresh={onRefresh} />
-          ))}
-        </ul>
-      )}
-
-      {showModal && (
-        <LinkCandidateModal
-          mandateId={mandateId}
-          linkedIds={linkedIds}
-          onLink={() => { setShowModal(false); onRefresh() }}
-          onClose={() => setShowModal(false)}
-        />
-      )}
     </div>
   )
 }
 
-// ─── Submissions tab ─────────────────────────────────────────────────────────
+// ─── Section 2: Read details ──────────────────────────────────────────────────
 
-function SubmissionsTab({ mandateCandidates, loading, onUpdateResponse }) {
-  const [updating, setUpdating] = useState(null)
-  const submitted = mandateCandidates.filter((mc) => mc.submitted_to_client)
-
-  if (loading) return <p className="text-sm text-[#999]">Loading submissions…</p>
-  if (submitted.length === 0) {
-    return <p className="text-sm text-[#999]">No candidates have been submitted to the client yet.</p>
-  }
-
-  async function handleResponseChange(mc, value) {
-    setUpdating(mc.id)
-    await supabase
-      .from('mandate_candidates')
-      .update({
-        client_response:    value || null,
-        client_response_at: value ? new Date().toISOString() : null,
-      })
-      .eq('id', mc.id)
-    setUpdating(null)
-    onUpdateResponse()
-  }
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider">Candidate</th>
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Submitted</th>
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider w-40">Client Response</th>
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Response Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          {submitted.map((mc) => (
-            <tr key={mc.id} className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors">
-              <td className="px-3 py-3">
-                <p className="font-medium text-[#0F0F12] truncate max-w-[160px]">{mc.candidate?.name ?? '—'}</p>
-                {mc.candidate?.skill_role && (
-                  <p className="text-xs text-[#666] mt-0.5 truncate max-w-[160px]">{mc.candidate.skill_role}</p>
-                )}
-              </td>
-              <td className="px-3 py-3 text-[#666] whitespace-nowrap">{formatDate(mc.submitted_at)}</td>
-              <td className="px-3 py-3">
-                <select
-                  value={mc.client_response ?? ''}
-                  onChange={(e) => handleResponseChange(mc, e.target.value)}
-                  disabled={updating === mc.id}
-                  className="h-7 w-full rounded-md border border-[#F0F0F4] bg-white px-2 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition disabled:opacity-50"
-                >
-                  <option value="">No response</option>
-                  <option value="shortlisted">Shortlisted</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="on_hold">On Hold</option>
-                </select>
-              </td>
-              <td className="px-3 py-3 text-[#666] whitespace-nowrap">{formatDate(mc.client_response_at)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-// ─── Read view ───────────────────────────────────────────────────────────────
-
-function ReadView({ mandate, mandateRecruiters }) {
+function ReadDetails({ mandate, workingRecruiters }) {
   const expDisplay =
     mandate.experience_min != null || mandate.experience_max != null
       ? `${mandate.experience_min ?? '?'} – ${mandate.experience_max ?? '?'} yrs`
@@ -604,91 +328,58 @@ function ReadView({ mandate, mandateRecruiters }) {
       : null
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h2 className="text-xl font-semibold text-[#0F0F12] leading-snug">{mandate.title}</h2>
-        {mandate.job_id && (
-          <p className="font-mono text-xs text-gray-400 mt-0.5 mb-2">{mandate.job_id}</p>
+    <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
+      <Field label="Client">
+        {mandate.client ? <span className="text-[#5E6AD2]">{mandate.client.name}</span> : null}
+      </Field>
+      <Field label="Role / Job ID">
+        <span>{mandate.title}</span>
+        {mandate.job_id && <span className="font-mono text-xs text-[#999] ml-2">{mandate.job_id}</span>}
+      </Field>
+      <Field label="Location">{mandate.location}</Field>
+      <Field label="Experience">{expDisplay}</Field>
+      <Field label="Budget">{budgetDisplay}</Field>
+      <Field label="Account Manager">{mandate.am?.name}</Field>
+      <Field label="Work Mode">{WORK_MODE_LABELS[mandate.work_mode] ?? mandate.work_mode}</Field>
+      <Field label="Employment">{EMPLOYMENT_LABELS[mandate.employment_type] ?? mandate.employment_type}</Field>
+      <Field label="Opened">{formatDate(mandate.created_at)}</Field>
+      <Field label="Recruiters Working" span={3}>
+        {workingRecruiters.length === 0 ? '—' : (
+          <div className="flex flex-wrap gap-1.5 mt-0.5">
+            {workingRecruiters.map((r) => (
+              <span key={r.id} className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700">
+                {r.name ?? r.id}
+              </span>
+            ))}
+          </div>
         )}
-        <div className="flex items-center gap-2 flex-wrap">
-          <StatusBadge value={mandate.status} />
-          <PriorityBadge value={mandate.priority} />
-        </div>
-      </div>
-
-      <hr className="border-[#F0F0F4]" />
-
-      <div>
-        <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">Details</h3>
-        <dl className="grid grid-cols-2 gap-x-8 gap-y-5">
-          <Field label="Client">
-            {mandate.client ? (
-              <Link to="/clients" className="text-[#5E6AD2] hover:underline">
-                {mandate.client.name}
-              </Link>
-            ) : null}
-          </Field>
-          <Field label="Account Manager">{mandate.am?.name}</Field>
-          <Field label="Positions">{mandate.num_positions}</Field>
-          <Field label="Experience">{expDisplay}</Field>
-          <Field label="Location">{mandate.location}</Field>
-          <Field label="Work Mode">{WORK_MODE_LABELS[mandate.work_mode] ?? mandate.work_mode}</Field>
-          <Field label="Employment Type">{EMPLOYMENT_LABELS[mandate.employment_type] ?? mandate.employment_type}</Field>
-          <Field label="Budget">{budgetDisplay}</Field>
-          <Field label="Created">{formatDate(mandate.created_at)}</Field>
-          <Field label="Assigned Recruiters" colSpan2>
-            {mandateRecruiters.length === 0 ? '—' : (
-              <div className="flex flex-wrap gap-1.5 mt-0.5">
-                {mandateRecruiters.map((mr) => (
-                  <span key={mr.recruiter_id} className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700">
-                    {mr.recruiter?.name ?? mr.recruiter_id}
-                  </span>
-                ))}
-              </div>
-            )}
-          </Field>
-        </dl>
-      </div>
-
+      </Field>
       {mandate.internal_notes && (
-        <>
-          <hr className="border-[#F0F0F4]" />
-          <div>
-            <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-3">Internal Notes</h3>
-            <p className="text-sm text-[#666] leading-relaxed whitespace-pre-wrap">{mandate.internal_notes}</p>
-          </div>
-        </>
+        <div className="col-span-2 sm:col-span-3">
+          <dt className="text-xs font-medium text-[#999] uppercase tracking-wide mb-0.5">Internal Notes</dt>
+          <dd className="text-sm text-[#666] leading-relaxed whitespace-pre-wrap">{mandate.internal_notes}</dd>
+        </div>
       )}
-
       {mandate.jd_text && (
-        <>
-          <hr className="border-[#F0F0F4]" />
-          <div>
-            <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-3">Job Description</h3>
-            <JDTextCollapsible text={mandate.jd_text} />
-          </div>
-        </>
+        <div className="col-span-2 sm:col-span-3">
+          <dt className="text-xs font-medium text-[#999] uppercase tracking-wide mb-0.5">Job Description</dt>
+          <dd><JDTextCollapsible text={mandate.jd_text} /></dd>
+        </div>
       )}
-    </div>
+    </dl>
   )
 }
 
-// ─── Edit view ───────────────────────────────────────────────────────────────
+// ─── Section 2: Edit view ─────────────────────────────────────────────────────
 
 function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, selectedRecruiters, toggleRecruiter }) {
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-3xl">
       <div>
         <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">Mandate Details</h3>
         <div className="grid grid-cols-2 gap-x-8 gap-y-5">
           <EditField label="Title" colSpan2>
-            <input
-              type="text"
-              value={editFields.title || ''}
-              onChange={(e) => setEditField('title', e.target.value)}
-              className={fldCls}
-              placeholder="e.g. Senior Backend Engineer"
-            />
+            <input type="text" value={editFields.title || ''} onChange={(e) => setEditField('title', e.target.value)} className={fldCls} placeholder="e.g. Senior Backend Engineer" />
           </EditField>
           <EditField label="Status">
             <select value={editFields.status || ''} onChange={(e) => setEditField('status', e.target.value)} className={fldCls}>
@@ -714,42 +405,16 @@ function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, sel
             </select>
           </EditField>
           <EditField label="Positions">
-            <input
-              type="number"
-              min="1"
-              value={editFields.num_positions || ''}
-              onChange={(e) => setEditField('num_positions', e.target.value)}
-              className={fldCls}
-            />
+            <input type="number" min="1" value={editFields.num_positions || ''} onChange={(e) => setEditField('num_positions', e.target.value)} className={fldCls} />
           </EditField>
           <EditField label="Exp. Min (yrs)">
-            <input
-              type="number"
-              min="0"
-              value={editFields.experience_min ?? ''}
-              onChange={(e) => setEditField('experience_min', e.target.value)}
-              className={fldCls}
-              placeholder="0"
-            />
+            <input type="number" min="0" value={editFields.experience_min ?? ''} onChange={(e) => setEditField('experience_min', e.target.value)} className={fldCls} placeholder="0" />
           </EditField>
           <EditField label="Exp. Max (yrs)">
-            <input
-              type="number"
-              min="0"
-              value={editFields.experience_max ?? ''}
-              onChange={(e) => setEditField('experience_max', e.target.value)}
-              className={fldCls}
-              placeholder="10"
-            />
+            <input type="number" min="0" value={editFields.experience_max ?? ''} onChange={(e) => setEditField('experience_max', e.target.value)} className={fldCls} placeholder="10" />
           </EditField>
           <EditField label="Location" colSpan2>
-            <input
-              type="text"
-              value={editFields.location || ''}
-              onChange={(e) => setEditField('location', e.target.value)}
-              className={fldCls}
-              placeholder="e.g. Bengaluru, Remote"
-            />
+            <input type="text" value={editFields.location || ''} onChange={(e) => setEditField('location', e.target.value)} className={fldCls} placeholder="e.g. Bengaluru, Remote" />
           </EditField>
           <EditField label="Work Mode">
             <select value={editFields.work_mode || ''} onChange={(e) => setEditField('work_mode', e.target.value)} className={fldCls}>
@@ -768,31 +433,13 @@ function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, sel
             </select>
           </EditField>
           <EditField label="Budget Currency">
-            <input
-              type="text"
-              value={editFields.budget_currency || ''}
-              onChange={(e) => setEditField('budget_currency', e.target.value)}
-              className={fldCls}
-              placeholder="INR"
-            />
+            <input type="text" value={editFields.budget_currency || ''} onChange={(e) => setEditField('budget_currency', e.target.value)} className={fldCls} placeholder="INR" />
           </EditField>
           <EditField label="Budget Min">
-            <input
-              type="number"
-              min="0"
-              value={editFields.budget_min ?? ''}
-              onChange={(e) => setEditField('budget_min', e.target.value)}
-              className={fldCls}
-            />
+            <input type="number" min="0" value={editFields.budget_min ?? ''} onChange={(e) => setEditField('budget_min', e.target.value)} className={fldCls} />
           </EditField>
           <EditField label="Budget Max">
-            <input
-              type="number"
-              min="0"
-              value={editFields.budget_max ?? ''}
-              onChange={(e) => setEditField('budget_max', e.target.value)}
-              className={fldCls}
-            />
+            <input type="number" min="0" value={editFields.budget_max ?? ''} onChange={(e) => setEditField('budget_max', e.target.value)} className={fldCls} />
           </EditField>
         </div>
       </div>
@@ -801,32 +448,28 @@ function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, sel
 
       <div>
         <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">Team</h3>
-        <div>
-          <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">Assigned Recruiters</label>
-          {recruiterProfiles.length === 0 ? (
-            <p className="text-sm text-[#999]">No recruiters found</p>
-          ) : (
-            <div className="flex flex-wrap gap-2 pt-0.5">
-              {recruiterProfiles.map((r) => {
-                const on = selectedRecruiters.includes(r.id)
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => toggleRecruiter(r.id)}
-                    className={`h-8 px-3 rounded-full text-sm font-medium border transition ${
-                      on
-                        ? 'bg-[#5E6AD2] text-white border-[#5E6AD2]'
-                        : 'bg-white text-[#666] border-[#F0F0F4] hover:border-[#5E6AD2]/50 hover:text-[#5E6AD2]'
-                    }`}
-                  >
-                    {r.name}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">Assigned Recruiters</label>
+        {recruiterProfiles.length === 0 ? (
+          <p className="text-sm text-[#999]">No recruiters found</p>
+        ) : (
+          <div className="flex flex-wrap gap-2 pt-0.5">
+            {recruiterProfiles.map((r) => {
+              const on = selectedRecruiters.includes(r.id)
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => toggleRecruiter(r.id)}
+                  className={`h-8 px-3 rounded-full text-sm font-medium border transition ${
+                    on ? 'bg-[#5E6AD2] text-white border-[#5E6AD2]' : 'bg-white text-[#666] border-[#F0F0F4] hover:border-[#5E6AD2]/50 hover:text-[#5E6AD2]'
+                  }`}
+                >
+                  {r.name}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       <hr className="border-[#F0F0F4]" />
@@ -835,22 +478,10 @@ function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, sel
         <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">Notes &amp; JD</h3>
         <div className="space-y-5">
           <EditField label="Internal Notes">
-            <textarea
-              value={editFields.internal_notes || ''}
-              onChange={(e) => setEditField('internal_notes', e.target.value)}
-              rows={3}
-              className={`${fldCls} h-auto py-2 resize-none`}
-              placeholder="Internal notes…"
-            />
+            <textarea value={editFields.internal_notes || ''} onChange={(e) => setEditField('internal_notes', e.target.value)} rows={3} className={`${fldCls} h-auto py-2 resize-none`} placeholder="Internal notes…" />
           </EditField>
           <EditField label="Job Description">
-            <textarea
-              value={editFields.jd_text || ''}
-              onChange={(e) => setEditField('jd_text', e.target.value)}
-              rows={8}
-              className={`${fldCls} h-auto py-2 resize-none`}
-              placeholder="Paste or type the JD…"
-            />
+            <textarea value={editFields.jd_text || ''} onChange={(e) => setEditField('jd_text', e.target.value)} rows={8} className={`${fldCls} h-auto py-2 resize-none`} placeholder="Paste or type the JD…" />
           </EditField>
         </div>
       </div>
@@ -858,43 +489,380 @@ function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, sel
   )
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+// ─── Section 2: Details container ────────────────────────────────────────────
 
-function initEditFields(mandate) {
-  const fields = {}
-  EDITABLE_FIELDS.forEach((k) => { fields[k] = mandate?.[k] ?? '' })
-  return fields
+function MandateDetailsSection({
+  mandate, workingRecruiters, isEditing,
+  editFields, setEditField, amProfiles, recruiterProfiles,
+  selectedRecruiters, toggleRecruiter, open, onToggle,
+}) {
+  return (
+    <div className="border-b border-[#F0F0F4]">
+      <button
+        onClick={onToggle}
+        className="w-full px-6 py-3.5 flex items-center justify-between text-left hover:bg-[#FAFAFA] transition-colors"
+      >
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <span className="text-sm font-semibold text-[#0F0F12] shrink-0">Mandate Details</span>
+          <MandateStatusBadge value={mandate.status} />
+          <PriorityBadge value={mandate.priority} />
+          {mandate.client && <span className="text-xs text-[#666] truncate">· {mandate.client.name}</span>}
+          {mandate.location && <span className="text-xs text-[#999] truncate">· {mandate.location}</span>}
+        </div>
+        <svg
+          viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
+          className={`w-4 h-4 text-[#999] transition-transform shrink-0 ml-3 ${open ? 'rotate-180' : ''}`}
+        >
+          <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="px-6 pb-6 pt-1">
+          {isEditing ? (
+            <EditView
+              editFields={editFields}
+              setEditField={setEditField}
+              amProfiles={amProfiles}
+              recruiterProfiles={recruiterProfiles}
+              selectedRecruiters={selectedRecruiters}
+              toggleRecruiter={toggleRecruiter}
+            />
+          ) : (
+            <ReadDetails mandate={mandate} workingRecruiters={workingRecruiters} />
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
-export default function MandatePanel() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const { isRecruiter } = useRole()
+// ─── Section 3: Candidate table row ──────────────────────────────────────────
 
-  const [mandate, setMandate]               = useState(null)
-  const [loading, setLoading]               = useState(true)
-  const [fetchError, setFetchError]         = useState('')
+function CandidateTableRow({ mc, onRefresh }) {
+  const { session }         = useAuth()
+  const [stage, setStage]   = useState(mc.stage ?? '')
+  const [status, setStatus] = useState(mc.status ?? '')
+  const [unlinkConfirm, setUnlinkConfirm] = useState(false)
+  const [unlinking, setUnlinking]         = useState(false)
+  const [saving, setSaving]               = useState(false)
+  const [prompt, setPrompt]               = useState(null)
+
+  const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
+  const changedBy     = session?.user?.id
+  const days          = daysInStage(mc)
+  const colorCls      = daysColor(days)
+  const lastUpdated   = mc.status_changed_at ?? mc.linked_at
+
+  // Contextual detail fields
+  const hasInterview = mc.interview_date && INTERVIEW_STAGES.has(stage)
+  const interviewStr = hasInterview
+    ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime(mc.interview_time) : null].filter(Boolean).join(' · ')
+    : null
+  const ctcStr     = formatMoney(mc.offered_ctc)
+  const billingStr = formatMoney(mc.billing_value_approx)
+  const dojStr     = mc.date_of_joining ? formatDateShort(mc.date_of_joining) : null
+  const hasDetails = interviewStr || ctcStr || billingStr || dojStr
+
+  async function save(updates) {
+    setSaving(true)
+    await supabase.from('mandate_candidates').update(updates).eq('id', mc.id)
+    setSaving(false)
+  }
+
+  async function handleStageChange(newStage) {
+    const oldStage  = stage
+    const oldStatus = status
+    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
+    setStage(newStage)
+    setStatus(newStatus ?? '')
+    await save({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
+    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'stage', oldValue: oldStage, newValue: newStage })
+    if (oldStatus !== newStatus) {
+      await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    }
+    if (INTERVIEW_STAGES.has(newStage))  setPrompt({ type: 'interview' })
+    else if (newStage === 'Offer')   setPrompt({ type: 'offer' })
+    else if (newStage === 'Joining') setPrompt({ type: 'joining' })
+    else onRefresh()
+  }
+
+  async function handleStatusChange(newStatus) {
+    const oldStatus = status
+    setStatus(newStatus)
+    await save({ status: newStatus, status_changed_at: new Date().toISOString() })
+    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    onRefresh()
+  }
+
+  async function handleUnlink() {
+    setUnlinking(true)
+    await supabase.from('mandate_candidates').delete().eq('id', mc.id)
+    setUnlinking(false)
+    onRefresh()
+  }
+
+  if (unlinkConfirm) {
+    return (
+      <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] items-center`}>
+        <div className="col-span-7 flex items-center gap-3">
+          <p className="text-sm text-[#0F0F12] flex-1 min-w-0 truncate">
+            Unlink <span className="font-medium">{mc.candidate?.name ?? 'this candidate'}</span>?
+          </p>
+          <button
+            onClick={handleUnlink}
+            disabled={unlinking}
+            className="h-7 px-3 rounded-lg text-xs font-semibold text-white bg-red-600 hover:opacity-90 disabled:opacity-50 transition shrink-0"
+          >
+            {unlinking ? 'Unlinking…' : 'Confirm'}
+          </button>
+          <button
+            onClick={() => setUnlinkConfirm(false)}
+            disabled={unlinking}
+            className="h-7 px-3 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition shrink-0"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors group items-start`}>
+
+        {/* Col 1: Candidate name + applicant ID */}
+        <div className="min-w-0 py-0.5">
+          <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
+          <p className="text-xs text-[#999] mt-0.5 font-mono">{mc.applicant_id ?? '—'}</p>
+        </div>
+
+        {/* Col 2: Stage */}
+        <div className="py-0.5">
+          <InlineDropdown
+            badge={<StageBadge value={stage || null} />}
+            options={STAGES}
+            onSelect={handleStageChange}
+          />
+        </div>
+
+        {/* Col 3: Status */}
+        <div className="py-0.5">
+          <InlineDropdown
+            badge={<CandidateStatusBadge value={status || null} />}
+            options={statusOptions}
+            onSelect={handleStatusChange}
+            disabled={!stage}
+          />
+        </div>
+
+        {/* Col 4: Contextual details */}
+        <div className="min-w-0 space-y-0.5 py-0.5">
+          {interviewStr && (
+            <p className="text-xs text-[#555] truncate">
+              <span className="text-[#999] mr-1">Interview</span>{interviewStr}
+            </p>
+          )}
+          {ctcStr && (
+            <p className="text-xs text-[#555]">
+              <span className="text-[#999] mr-1">CTC</span>{ctcStr}
+            </p>
+          )}
+          {billingStr && (
+            <p className="text-xs text-[#555]">
+              <span className="text-[#999] mr-1">Billing</span>{billingStr}
+            </p>
+          )}
+          {dojStr && (
+            <p className="text-xs text-[#555]">
+              <span className="text-[#999] mr-1">DOJ</span>{dojStr}
+            </p>
+          )}
+          {!hasDetails && <span className="text-xs text-[#DDD]">—</span>}
+        </div>
+
+        {/* Col 5: Days in stage */}
+        <div className="flex items-start gap-1 py-0.5">
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${colorCls}`}>
+            {days}d
+          </span>
+          {saving && <span className="text-[10px] text-[#999] mt-0.5">…</span>}
+        </div>
+
+        {/* Col 6: Last updated */}
+        <div className="text-xs text-[#999] whitespace-nowrap py-0.5">{formatRelDate(lastUpdated)}</div>
+
+        {/* Col 7: Unlink button (appears on hover) */}
+        <div className="flex justify-end py-0.5">
+          <button
+            onClick={() => setUnlinkConfirm(true)}
+            title="Unlink candidate"
+            className="w-7 h-7 flex items-center justify-center rounded text-[#CCC] hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <path d="M5 5l6 6M11 5L5 11" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {prompt && (
+        <StagePromptModal
+          type={prompt.type}
+          mcId={mc.id}
+          supabaseClient={supabase}
+          onClose={() => { setPrompt(null); onRefresh() }}
+        />
+      )}
+    </>
+  )
+}
+
+// ─── Section 3: Candidate list ────────────────────────────────────────────────
+
+function CandidateList({ mandateId, mandateCandidates, loading, onRefresh }) {
+  const [sortBy, setSortBy]       = useState('last_updated')
+  const [filterStage, setFilterStage] = useState('')
+  const [showModal, setShowModal] = useState(false)
+
+  const linkedIds = useMemo(
+    () => new Set(mandateCandidates.map((mc) => mc.candidate_id)),
+    [mandateCandidates]
+  )
+
+  const displayed = useMemo(() => {
+    let list = filterStage
+      ? mandateCandidates.filter((mc) => mc.stage === filterStage)
+      : [...mandateCandidates]
+
+    if (sortBy === 'stage') {
+      list.sort((a, b) => (STAGE_ORDER[a.stage] ?? 99) - (STAGE_ORDER[b.stage] ?? 99))
+    } else if (sortBy === 'last_updated') {
+      list.sort((a, b) => {
+        const ta = new Date(a.status_changed_at ?? a.linked_at ?? 0).getTime()
+        const tb = new Date(b.status_changed_at ?? b.linked_at ?? 0).getTime()
+        return tb - ta
+      })
+    } else if (sortBy === 'days_in_stage') {
+      list.sort((a, b) => daysInStage(b) - daysInStage(a))
+    }
+    return list
+  }, [mandateCandidates, sortBy, filterStage])
+
+  return (
+    <div>
+      {/* Controls bar */}
+      <div className="px-5 py-3 border-b border-[#F0F0F4] flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={filterStage}
+            onChange={(e) => setFilterStage(e.target.value)}
+            className="h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition"
+          >
+            <option value="">All stages</option>
+            {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition"
+          >
+            <option value="last_updated">Sort: Last updated</option>
+            <option value="stage">Sort: Stage</option>
+            <option value="days_in_stage">Sort: Days in stage ↓</option>
+          </select>
+          <span className="text-xs text-[#999]">
+            {displayed.length}{filterStage ? ` of ${mandateCandidates.length}` : ''} candidate{displayed.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="h-8 px-3 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 flex items-center gap-1.5 shrink-0"
+          style={{ backgroundColor: '#5E6AD2' }}
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+            <path d="M8 3v10M3 8h10" strokeLinecap="round" />
+          </svg>
+          Link Candidate
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="px-6 py-10 text-sm text-[#999]">Loading candidates…</p>
+      ) : displayed.length === 0 ? (
+        <p className="px-6 py-10 text-sm text-[#999]">
+          {filterStage ? 'No candidates at this stage.' : 'No candidates linked yet.'}
+        </p>
+      ) : (
+        <>
+          {/* Header row */}
+          <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] bg-[#FAFAFA]`}>
+            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Candidate</span>
+            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Stage</span>
+            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Status</span>
+            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Details</span>
+            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5 whitespace-nowrap">In Stage</span>
+            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Updated</span>
+            <span />
+          </div>
+          {displayed.map((mc) => (
+            <CandidateTableRow key={mc.id} mc={mc} onRefresh={onRefresh} />
+          ))}
+        </>
+      )}
+
+      {showModal && (
+        <LinkCandidateModal
+          mandateId={mandateId}
+          linkedIds={linkedIds}
+          onLink={() => { setShowModal(false); onRefresh() }}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function MandatePanel() {
+  const { id }       = useParams()
+  const navigate     = useNavigate()
+  const { isRecruiter, loading: roleLoading } = useRole()
+
+  const [mandate, setMandate]                     = useState(null)
+  const [loading, setLoading]                     = useState(true)
+  const [fetchError, setFetchError]               = useState('')
   const [mandateCandidates, setMandateCandidates] = useState([])
   const [candidatesLoading, setCandidatesLoading] = useState(true)
-  const [amProfiles, setAmProfiles]         = useState([])
-
-  const [isEditing, setIsEditing]           = useState(false)
-  const [editFields, setEditFields]         = useState({})
-  const [isDirty, setIsDirty]               = useState(false)
-  const [editSaving, setEditSaving]         = useState(false)
-  const [editError, setEditError]           = useState('')
-  const [editSuccess, setEditSuccess]       = useState(false)
-  const [dialog, setDialog]                 = useState(null)
-  const [dialogSaving, setDialogSaving]     = useState(false)
-  const [activeTab, setActiveTab]           = useState('candidates')
+  const [amProfiles, setAmProfiles]               = useState([])
   const [recruiterProfiles, setRecruiterProfiles] = useState([])
   const [mandateRecruiters, setMandateRecruiters] = useState([])
   const [selectedRecruiters, setSelectedRecruiters] = useState([])
 
-  const originalFieldsRef = useRef({})
-  const originalRecruitersRef = useRef([])
+  const [isEditing, setIsEditing]     = useState(false)
+  const [editFields, setEditFields]   = useState({})
+  const [isDirty, setIsDirty]         = useState(false)
+  const [editSaving, setEditSaving]   = useState(false)
+  const [editError, setEditError]     = useState('')
+  const [editSuccess, setEditSuccess] = useState(false)
+  const [dialog, setDialog]           = useState(null)
+  const [dialogSaving, setDialogSaving] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(true)
 
-  // ── Fetch mandate ─────────────────────────────────────────────────────
+  const originalFieldsRef     = useRef({})
+  const originalRecruitersRef = useRef([])
+  const detailsDefaultSet     = useRef(false)
+
+  // Set details section default open state based on role (once, after role loads)
+  useEffect(() => {
+    if (!roleLoading && !detailsDefaultSet.current) {
+      detailsDefaultSet.current = true
+      setDetailsOpen(!isRecruiter)
+    }
+  }, [roleLoading, isRecruiter])
+
+  // Fetch mandate
   useEffect(() => {
     if (!id) return
     setLoading(true)
@@ -911,29 +879,23 @@ export default function MandatePanel() {
       })
   }, [id])
 
-  // ── Fetch AM profiles ─────────────────────────────────────────────────
+  // Fetch AM profiles
   useEffect(() => {
     supabase
-      .from('profiles')
-      .select('id, name, role')
-      .in('role', ['account_manager', 'founder'])
-      .eq('active', true)
-      .order('name')
+      .from('profiles').select('id, name, role')
+      .in('role', ['account_manager', 'founder']).eq('active', true).order('name')
       .then(({ data }) => setAmProfiles(data ?? []))
   }, [])
 
-  // ── Fetch recruiter profiles ──────────────────────────────────────────
+  // Fetch recruiter profiles
   useEffect(() => {
     supabase
-      .from('profiles')
-      .select('id, name')
-      .eq('role', 'recruiter')
-      .eq('active', true)
-      .order('name')
+      .from('profiles').select('id, name')
+      .eq('role', 'recruiter').eq('active', true).order('name')
       .then(({ data }) => setRecruiterProfiles(data ?? []))
   }, [])
 
-  // ── Fetch mandate recruiters ──────────────────────────────────────────
+  // Fetch assigned recruiters
   function fetchMandateRecruiters() {
     if (!id) return
     supabase
@@ -942,16 +904,15 @@ export default function MandatePanel() {
       .eq('mandate_id', id)
       .then(({ data }) => setMandateRecruiters(data ?? []))
   }
+  useEffect(() => { fetchMandateRecruiters() }, [id]) // eslint-disable-line
 
-  useEffect(() => { fetchMandateRecruiters() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Fetch mandate candidates ──────────────────────────────────────────
+  // Fetch candidates (with linked_by profile for "recruiters working it")
   function fetchCandidates() {
     if (!id) return
     setCandidatesLoading(true)
     supabase
       .from('mandate_candidates')
-      .select('*, candidate:candidates!candidate_id(id, name, skill_role, email)')
+      .select('*, candidate:candidates!candidate_id(id, name, skill_role, email), linked_by_profile:profiles!linked_by(id, name)')
       .eq('mandate_id', id)
       .order('linked_at', { ascending: false })
       .then(({ data }) => {
@@ -959,27 +920,33 @@ export default function MandatePanel() {
         setCandidatesLoading(false)
       })
   }
+  useEffect(() => { fetchCandidates() }, [id]) // eslint-disable-line
 
-  useEffect(() => { fetchCandidates() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Derive recruiters actively working this mandate (distinct linked_by)
+  const workingRecruiters = useMemo(() => {
+    const seen = new Set()
+    return mandateCandidates
+      .filter((mc) => mc.linked_by && !seen.has(mc.linked_by) && seen.add(mc.linked_by))
+      .map((mc) => mc.linked_by_profile ?? { id: mc.linked_by, name: 'Unknown' })
+  }, [mandateCandidates])
 
-  // ── Dirty tracking ────────────────────────────────────────────────────
+  // Dirty tracking
   useEffect(() => {
     if (!isEditing) return
     const orig = originalFieldsRef.current
     const fieldsDirty = EDITABLE_FIELDS.some((k) => String(editFields[k] ?? '') !== String(orig[k] ?? ''))
     const origSet = new Set(originalRecruitersRef.current)
-    const curSet = new Set(selectedRecruiters)
+    const curSet  = new Set(selectedRecruiters)
     const recruitersDirty = origSet.size !== curSet.size || [...origSet].some((rid) => !curSet.has(rid))
     setIsDirty(fieldsDirty || recruitersDirty)
   }, [editFields, selectedRecruiters, isEditing])
 
   useEffect(() => {
-    if (isDirty) window.onbeforeunload = () => true
-    else window.onbeforeunload = null
+    window.onbeforeunload = isDirty ? () => true : null
     return () => { window.onbeforeunload = null }
   }, [isDirty])
 
-  // ── Edit helpers ──────────────────────────────────────────────────────
+  // Edit helpers
   function handleEditStart() {
     const fields = initEditFields(mandate)
     originalFieldsRef.current = { ...fields }
@@ -991,12 +958,11 @@ export default function MandatePanel() {
     setEditSuccess(false)
     setIsDirty(false)
     setIsEditing(true)
+    setDetailsOpen(true)
   }
 
   function toggleRecruiter(rid) {
-    setSelectedRecruiters((prev) =>
-      prev.includes(rid) ? prev.filter((r) => r !== rid) : [...prev, rid]
-    )
+    setSelectedRecruiters((prev) => prev.includes(rid) ? prev.filter((r) => r !== rid) : [...prev, rid])
   }
 
   function setEditField(key, value) {
@@ -1012,13 +978,8 @@ export default function MandatePanel() {
   function handleEditCancel() {
     if (isDirty) {
       setDialog({
-        message: 'Do you want to save your changes before cancelling?',
-        onSave: async () => {
-          setDialogSaving(true)
-          await performSave()
-          setDialogSaving(false)
-          setDialog(null)
-        },
+        message: 'Save changes before cancelling?',
+        onSave: async () => { setDialogSaving(true); await performSave(); setDialogSaving(false); setDialog(null) },
         onDiscard: () => { resetEditState(); setDialog(null) },
         onCancel: () => setDialog(null),
       })
@@ -1058,32 +1019,22 @@ export default function MandatePanel() {
       .single()
 
     setEditSaving(false)
-
-    if (err) {
-      setEditError(err.message)
-      return false
-    }
+    if (err) { setEditError(err.message); return false }
 
     setMandate(data)
 
-    // ── Recruiter diff ───────────────────────────────────────────────────
-    const origSet = new Set(originalRecruitersRef.current)
-    const newSet = new Set(selectedRecruiters)
-    const toAdd = [...newSet].filter((rid) => !origSet.has(rid))
+    const origSet  = new Set(originalRecruitersRef.current)
+    const newSet   = new Set(selectedRecruiters)
+    const toAdd    = [...newSet].filter((rid) => !origSet.has(rid))
     const toRemove = [...origSet].filter((rid) => !newSet.has(rid))
 
     if (toAdd.length > 0) {
-      const rows = toAdd.map((rid) => ({ mandate_id: id, recruiter_id: rid }))
-      const { error: addErr } = await supabase.from('mandate_recruiters').insert(rows)
-      if (addErr) { setEditError(addErr.message); setEditSaving(false); return false }
+      const { error: addErr } = await supabase.from('mandate_recruiters').insert(toAdd.map((rid) => ({ mandate_id: id, recruiter_id: rid })))
+      if (addErr) { setEditError(addErr.message); return false }
     }
     if (toRemove.length > 0) {
-      const { error: removeErr } = await supabase
-        .from('mandate_recruiters')
-        .delete()
-        .eq('mandate_id', id)
-        .in('recruiter_id', toRemove)
-      if (removeErr) { setEditError(removeErr.message); setEditSaving(false); return false }
+      const { error: rmErr } = await supabase.from('mandate_recruiters').delete().eq('mandate_id', id).in('recruiter_id', toRemove)
+      if (rmErr) { setEditError(rmErr.message); return false }
     }
 
     originalRecruitersRef.current = [...newSet]
@@ -1096,7 +1047,7 @@ export default function MandatePanel() {
     return true
   }
 
-  // ── Loading / error screens ───────────────────────────────────────────
+  // ── Loading / error ──────────────────────────────────────────────────────────
   if (loading) {
     return (
       <AppShell title="Mandate">
@@ -1117,117 +1068,90 @@ export default function MandatePanel() {
     )
   }
 
-  // ── Main render ───────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <AppShell title={mandate.title}>
-      <div className="flex flex-col h-full">
-
-        {/* Page header */}
-        <div className="px-6 py-4 border-b border-[#F0F0F4] bg-white flex items-center justify-between shrink-0 gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={() => navigate('/mandates')}
-              className="flex items-center gap-1 text-sm text-[#666] hover:text-[#0F0F12] transition-colors shrink-0"
-            >
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-                <path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Back
-            </button>
-            <span className="text-[#E0E0E8] select-none">|</span>
-            <h1 className="text-base font-semibold text-[#0F0F12] truncate">{mandate.title}</h1>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {!isEditing ? (
-              !isRecruiter && (
-                <button
-                  onClick={handleEditStart}
-                  className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:border-[#5E6AD2] hover:text-[#5E6AD2] transition"
-                >
-                  Edit
-                </button>
-              )
-            ) : (
-              <>
-                <button
-                  onClick={handleEditCancel}
-                  className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={performSave}
-                  disabled={editSaving}
-                  className="h-8 px-4 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: '#5E6AD2' }}
-                >
-                  {editSaving ? 'Saving…' : 'Save changes'}
-                </button>
-              </>
-            )}
-          </div>
+      {/* Sticky page header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-[#F0F0F4] px-6 py-3 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => navigate('/mandates')}
+            className="flex items-center gap-1 text-sm text-[#666] hover:text-[#0F0F12] transition-colors shrink-0"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+              <path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Back
+          </button>
+          <span className="text-[#E0E0E8] select-none">|</span>
+          <h1 className="text-base font-semibold text-[#0F0F12] truncate">{mandate.title}</h1>
         </div>
-
-        {/* Banners */}
-        {editSuccess && (
-          <div className="mx-6 mt-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 shrink-0">
-            Changes saved successfully.
-          </div>
-        )}
-        {editError && (
-          <div className="mx-6 mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 shrink-0">
-            {editError}
-          </div>
-        )}
-
-        {/* Two-column body */}
-        <div className="flex-1 overflow-hidden flex min-h-0">
-
-          {/* Left — mandate details */}
-          <div className="flex-[3] overflow-y-auto px-6 py-6 border-r border-[#F0F0F4]">
-            {isEditing
-              ? <EditView editFields={editFields} setEditField={setEditField} amProfiles={amProfiles} recruiterProfiles={recruiterProfiles} selectedRecruiters={selectedRecruiters} toggleRecruiter={toggleRecruiter} />
-              : <ReadView mandate={mandate} mandateRecruiters={mandateRecruiters} />
-            }
-          </div>
-
-          {/* Right — tabbed panel */}
-          <div className="flex-[2] flex flex-col min-h-0">
-            <div className="flex border-b border-[#F0F0F4] px-5 shrink-0 bg-white">
-              {['candidates', 'submissions'].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`py-2.5 mr-5 text-sm font-medium capitalize border-b-2 transition-colors ${
-                    activeTab === tab
-                      ? 'border-[#5E6AD2] text-[#5E6AD2]'
-                      : 'border-transparent text-[#999] hover:text-[#666]'
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-            <div className="flex-1 overflow-y-auto px-5 py-5">
-              {activeTab === 'candidates' && (
-                <CandidatesTab
-                  mandateId={id}
-                  mandateCandidates={mandateCandidates}
-                  loading={candidatesLoading}
-                  onRefresh={fetchCandidates}
-                />
-              )}
-              {activeTab === 'submissions' && (
-                <SubmissionsTab
-                  mandateCandidates={mandateCandidates}
-                  loading={candidatesLoading}
-                  onUpdateResponse={fetchCandidates}
-                />
-              )}
-            </div>
-          </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {editSuccess && <span className="text-xs text-green-600 font-medium">Saved</span>}
+          {!isEditing ? (
+            !isRecruiter && (
+              <button
+                onClick={handleEditStart}
+                className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:border-[#5E6AD2] hover:text-[#5E6AD2] transition"
+              >
+                Edit
+              </button>
+            )
+          ) : (
+            <>
+              <button
+                onClick={handleEditCancel}
+                className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={performSave}
+                disabled={editSaving}
+                className="h-8 px-4 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: '#5E6AD2' }}
+              >
+                {editSaving ? 'Saving…' : 'Save changes'}
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {editError && (
+        <div className="mx-6 mt-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          {editError}
+        </div>
+      )}
+
+      {/* Section 1: Snapshot strip */}
+      <SnapshotStrip mandateCandidates={mandateCandidates} mandate={mandate} />
+
+      {/* Section 2: Mandate details (collapsible) */}
+      <MandateDetailsSection
+        mandate={mandate}
+        workingRecruiters={workingRecruiters}
+        isEditing={isEditing}
+        editFields={editFields}
+        setEditField={setEditField}
+        amProfiles={amProfiles}
+        recruiterProfiles={recruiterProfiles}
+        selectedRecruiters={selectedRecruiters}
+        toggleRecruiter={toggleRecruiter}
+        open={detailsOpen}
+        onToggle={() => setDetailsOpen((o) => !o)}
+      />
+
+      {/* Section 3: Candidate list */}
+      <div className="px-5 pt-4 pb-2">
+        <h2 className="text-xs font-semibold text-[#666] uppercase tracking-wider">Candidates</h2>
+      </div>
+      <CandidateList
+        mandateId={id}
+        mandateCandidates={mandateCandidates}
+        loading={candidatesLoading}
+        onRefresh={fetchCandidates}
+      />
 
       {dialog && (
         <UnsavedChangesModal
