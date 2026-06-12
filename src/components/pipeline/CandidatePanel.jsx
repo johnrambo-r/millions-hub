@@ -829,38 +829,30 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                 )}
               </dl>
 
-              {(candidate?.ctc_breakup || candidate?.offers_in_hand || candidate?.lwd || candidate?.dob || candidate?.notable_ids) && (
-                <div className="mt-4 pt-4 border-t border-[#F0F0F4]">
-                  <p className="text-xs font-semibold text-[#999] uppercase tracking-wider mb-3">Additional Info</p>
-                  <dl className="grid grid-cols-2 gap-x-8 gap-y-4">
-                    {candidate.ctc_breakup && (
-                      <Field label="CTC Breakup" colSpan2>
-                        {(() => {
-                          const p = safeParseJson(candidate.ctc_breakup)
-                          return p ? `${p.fixed ?? '—'} Fixed + ${p.variable ?? '—'} Variable (LPA)` : candidate.ctc_breakup
-                        })()}
-                      </Field>
-                    )}
-                    {candidate.offers_in_hand && (
-                      <Field label="Offers in hand" colSpan2>
-                        {(() => {
-                          const p = safeParseJson(candidate.offers_in_hand)
-                          if (!p) return candidate.offers_in_hand
-                          return [
-                            p.count != null ? `${p.count} offer${p.count !== 1 ? 's' : ''}` : null,
-                            p.details,
-                          ].filter(Boolean).join(' — ') || '—'
-                        })()}
-                      </Field>
-                    )}
-                    {candidate.lwd && <Field label="Last working day">{formatDateShort(candidate.lwd)}</Field>}
-                    {candidate.dob && <Field label="Date of birth">{formatDateShort(candidate.dob)}</Field>}
-                    {candidate.notable_ids && (
-                      <Field label="Notable IDs" colSpan2>{candidate.notable_ids}</Field>
-                    )}
-                  </dl>
-                </div>
-              )}
+              <div className="mt-4 pt-4 border-t border-[#F0F0F4]">
+                <p className="text-xs font-semibold text-[#999] uppercase tracking-wider mb-3">Additional Info</p>
+                <dl className="grid grid-cols-2 gap-x-8 gap-y-4">
+                  <Field label="CTC Breakup" colSpan2>
+                    {(() => {
+                      const p = safeParseJson(candidate?.ctc_breakup)
+                      return p ? `${p.fixed ?? '—'} Fixed + ${p.variable ?? '—'} Variable (LPA)` : candidate?.ctc_breakup
+                    })()}
+                  </Field>
+                  <Field label="Offers in hand" colSpan2>
+                    {(() => {
+                      const p = safeParseJson(candidate?.offers_in_hand)
+                      if (!p) return candidate?.offers_in_hand || null
+                      return [
+                        p.count != null ? `${p.count} offer${p.count !== 1 ? 's' : ''}` : null,
+                        p.details,
+                      ].filter(Boolean).join(' — ') || null
+                    })()}
+                  </Field>
+                  <Field label="Last working day">{candidate?.lwd ? formatDateShort(candidate.lwd) : null}</Field>
+                  <Field label="Date of birth">{candidate?.dob ? formatDateShort(candidate.dob) : null}</Field>
+                  <Field label="Notable IDs" colSpan2>{candidate?.notable_ids}</Field>
+                </dl>
+              </div>
             </>
           )}
 
