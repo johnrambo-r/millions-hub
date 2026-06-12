@@ -54,7 +54,7 @@ export default function AssignMandateModal({ candidateId, candidateName, onClose
     setSelected(null)
     let query = supabase
       .from('mandates')
-      .select('id, title, clients(id, name)')
+      .select('id, title, job_id, clients(id, name)')
       .eq('status', 'active')
       .order('title')
     if (clientFilter) query = query.eq('client_id', clientFilter)
@@ -109,7 +109,7 @@ export default function AssignMandateModal({ candidateId, candidateName, onClose
 
       const { error: insertError } = await supabase.from('mandate_candidates').insert(payload)
       if (insertError) throw insertError
-      onAssigned(applicantId)
+      onAssigned(applicantId, { mandateId: selected.id, jobId: selected.job_id ?? null })
     } catch (e) {
       setError(e.message)
       setConfirming(false)

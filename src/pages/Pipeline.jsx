@@ -51,7 +51,7 @@ const MC_SELECT = `
   billing_value_approx,
   linked_by_profile:profiles!linked_by(id, name),
   candidates(${CANDIDATE_FIELDS}),
-  mandates(id, title, clients(id, name))
+  mandates(id, title, job_id, clients(id, name))
 `
 
 const UNASSIGNED_SELECT = CANDIDATE_FIELDS
@@ -143,7 +143,7 @@ function LoadingState() {
 
 // ─── MC table (Active / Talent Pool / Placed) ───────────────────────────────
 
-function MCRow({ row, onSelect, activeTab, onRefresh }) {
+function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
   const { session } = useAuth()
   const [stage, setStage]   = useState(row.stage ?? '')
   const [status, setStatus] = useState(row.status ?? '')
@@ -249,7 +249,15 @@ function MCRow({ row, onSelect, activeTab, onRefresh }) {
         </TD>
         {isTalentPool && (
           <TD onClick={(e) => e.stopPropagation()}>
-            <button className="h-6 px-2.5 rounded text-xs font-medium text-[#5E6AD2] border border-[#5E6AD2]/30 hover:bg-[#5E6AD2]/10 transition">
+            <button
+              onClick={() => onReassign({
+                id: c.id,
+                name: c.name,
+                isReassignment: true,
+                oldJobId: row.mandates?.job_id ?? null,
+              })}
+              className="h-6 px-2.5 rounded text-xs font-medium text-[#5E6AD2] border border-[#5E6AD2]/30 hover:bg-[#5E6AD2]/10 transition"
+            >
               Re-assign
             </button>
           </TD>
@@ -267,7 +275,7 @@ function MCRow({ row, onSelect, activeTab, onRefresh }) {
   )
 }
 
-function MCTable({ rows, loading, onSelect, activeTab, onRefresh }) {
+function MCTable({ rows, loading, onSelect, activeTab, onRefresh, onReassign }) {
   if (loading) return <LoadingState />
   if (rows.length === 0) return <EmptyState />
 
@@ -298,6 +306,7 @@ function MCTable({ rows, loading, onSelect, activeTab, onRefresh }) {
               onSelect={onSelect}
               activeTab={activeTab}
               onRefresh={onRefresh}
+              onReassign={onReassign}
             />
           ))}
         </tbody>
@@ -864,6 +873,7 @@ export default function Pipeline() {
               onSelect={handleSelect}
               activeTab={activeTab}
               onRefresh={() => setRefreshToken((t) => t + 1)}
+              onReassign={setAssignTarget}
             />
           ) : activeTab === 'unassigned' ? (
             <UnassignedTable
@@ -903,9 +913,22 @@ export default function Pipeline() {
           candidateId={assignTarget.id}
           candidateName={assignTarget.name}
           onClose={() => setAssignTarget(null)}
-          onAssigned={(appId) => {
+          onAssigned={(appId, newMandate) => {
+            if (assignTarget.isReassignment) {
+              logActivity({
+                candidateId: assignTarget.id,
+                mandateId: newMandate.mandateId,
+                applicantId: appId,
+                changedBy: session?.user?.id,
+                changeType: 'reassigned_from_talent_pool',
+                oldValue: assignTarget.oldJobId,
+                newValue: newMandate.jobId,
+              })
+              setAssignToast(`Re-assigned as ${appId}`)
+            } else {
+              setAssignToast(`Assigned as ${appId}`)
+            }
             setAssignTarget(null)
-            setAssignToast(appId)
             setTimeout(() => setAssignToast(''), 4000)
             setRefreshToken((t) => t + 1)
           }}
@@ -913,7 +936,7 @@ export default function Pipeline() {
       )}
 
       <SuccessToast
-        message={assignToast ? `Assigned as ${assignToast}` : null}
+        message={assignToast || null}
         onDismiss={() => setAssignToast('')}
       />
     </AppShell>
