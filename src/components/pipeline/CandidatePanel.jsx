@@ -313,9 +313,13 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
   async function loadActivityLog(candidateId) {
     setActivityLogLoading(true)
+
+    // Fetch raw rows — no FK joins, as activity_log may not have schema-defined
+    // foreign keys to profiles or mandates, which causes PostgREST to error the
+    // whole query and return null data.
     let query = supabase
       .from('activity_log')
-      .select('id, change_type, old_value, new_value, created_at, mandate_id, changed_by, profiles!changed_by(name), mandates!mandate_id(id, title, job_id)')
+      .select('id, change_type, old_value, new_value, created_at, mandate_id, changed_by')
       .eq('candidate_id', candidateId)
       .order('created_at', { ascending: false })
 
@@ -324,8 +328,45 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     }
 
     const { data, error } = await query
-    if (error) console.error('[CandidatePanel] activity_log:', error.message)
-    setActivityLog(data ?? [])
+    if (error) {
+      console.error('[CandidatePanel] activity_log:', error.message)
+      setActivityLog([])
+      setActivityLogLoading(false)
+      return
+    }
+    if (!data?.length) {
+      setActivityLog([])
+      setActivityLogLoading(false)
+      return
+    }
+
+    // Enrich: profile names for changed_by UUIDs
+    const changedByIds = [...new Set(data.map((e) => e.changed_by).filter(Boolean))]
+    const profileMap = {}
+    if (changedByIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', changedByIds)
+      profiles?.forEach((p) => { profileMap[p.id] = p.name })
+    }
+
+    // Enrich: mandate title + job_id for mandate_ids
+    const mandateIds = [...new Set(data.map((e) => e.mandate_id).filter(Boolean))]
+    const mandateMap = {}
+    if (mandateIds.length > 0) {
+      const { data: mandates } = await supabase
+        .from('mandates')
+        .select('id, title, job_id')
+        .in('id', mandateIds)
+      mandates?.forEach((m) => { mandateMap[m.id] = m })
+    }
+
+    setActivityLog(data.map((entry) => ({
+      ...entry,
+      profiles: entry.changed_by ? { name: profileMap[entry.changed_by] ?? null } : null,
+      mandates: entry.mandate_id ? (mandateMap[entry.mandate_id] ?? null) : null,
+    })))
     setActivityLogLoading(false)
   }
 
