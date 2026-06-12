@@ -22,6 +22,7 @@ import useRole from '../hooks/useRole'
 // ─── constants ──────────────────────────────────────────────────────────────
 
 const TABS = [
+  { id: 'pipeline',    label: 'Pipeline' },
   { id: 'active',      label: 'Active' },
   { id: 'talent_pool', label: 'Talent Pool' },
   { id: 'placed',      label: 'Placed' },
@@ -29,7 +30,6 @@ const TABS = [
   { id: 'all',         label: 'All' },
 ]
 
-// Full candidate fields so CandidatePanel has everything it needs
 const CANDIDATE_FIELDS = `
   id, name, email, phone, alt_contact,
   current_location, preferred_location, willing_to_relocate,
@@ -47,11 +47,11 @@ const CANDIDATE_FIELDS = `
 
 const MC_SELECT = `
   id, candidate_id, stage, status, applicant_id, status_changed_at, linked_by, linked_at,
-  interview_date, interview_time, mandate_id,
+  interview_date, interview_time, date_of_joining, mandate_id,
   billing_value_approx,
   linked_by_profile:profiles!linked_by(id, name),
   candidates(${CANDIDATE_FIELDS}),
-  mandates(id, title, job_id, clients(id, name))
+  mandates(id, title, job_id, clients(id, name), am:profiles!am_id(id, name))
 `
 
 const UNASSIGNED_SELECT = CANDIDATE_FIELDS
@@ -61,7 +61,16 @@ const ALL_SELECT = `
   mandate_candidates(id, candidate_id, mandate_id, applicant_id, stage, status, status_changed_at, billing_value_approx)
 `
 
-const MC_TABS = new Set(['active', 'talent_pool', 'placed'])
+const MC_TABS = new Set(['pipeline', 'active', 'talent_pool', 'placed'])
+
+// Tabs that use the new 9-column table layout
+const NEW_LAYOUT_TABS = new Set(['pipeline', 'active'])
+
+// Stages from L2 upward — used for pipeline tab DB-level filter
+const L2_ABOVE_STAGES = STAGES.slice(STAGES.indexOf('L2'))
+
+// All statuses flattened — used in status dropdown when no stage is selected
+const ALL_STATUSES_FLAT = [...new Set(Object.values(STAGE_STATUS_MAP).flat())].sort()
 
 const INTERVIEW_STAGES = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
 
@@ -97,7 +106,6 @@ function noShowRowBg(row) {
   return ''
 }
 
-// Latest mc record from a candidate row (All tab)
 function latestMC(row) {
   const mcs = row.mandate_candidates
   if (!mcs?.length) return null
@@ -141,7 +149,213 @@ function LoadingState() {
   return <div className="flex items-center justify-center py-20 text-sm text-[#999]">Loading…</div>
 }
 
-// ─── MC table (Active / Talent Pool / Placed) ───────────────────────────────
+// ─── In Stage badge ──────────────────────────────────────────────────────────
+
+function InStageBadge({ dateStr }) {
+  if (!dateStr) return <span className="text-xs text-[#999]">—</span>
+  const days = daysSince(dateStr)
+  if (days < 7) {
+    return <span className="text-xs text-[#666]">{days}d</span>
+  }
+  if (days < 14) {
+    return (
+      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-700">
+        {days}d
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700">
+      {days}d
+    </span>
+  )
+}
+
+// ─── New Pipeline / Active table ─────────────────────────────────────────────
+
+function NewMCRow({ row, onSelect, onRefresh }) {
+  const { session } = useAuth()
+  const [stage, setStage]   = useState(row.stage ?? '')
+  const [status, setStatus] = useState(row.status ?? '')
+  const [prompt, setPrompt] = useState(null)
+
+  const c         = row.candidates ?? {}
+  const changedBy = session?.user?.id
+  const rowBg     = noShowRowBg({ status, status_changed_at: row.status_changed_at })
+
+  async function handleStageChange(newStage) {
+    const oldStage  = stage
+    const oldStatus = status
+    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
+
+    setStage(newStage)
+    setStatus(newStatus ?? '')
+
+    await supabase.from('mandate_candidates')
+      .update({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
+      .eq('id', row.id)
+
+    await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'stage', oldValue: oldStage, newValue: newStage })
+    if (oldStatus !== newStatus) {
+      await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    }
+
+    if (INTERVIEW_STAGES.has(newStage)) {
+      setPrompt({ type: 'interview' })
+    } else if (newStage === 'Offer') {
+      setPrompt({ type: 'offer' })
+    } else if (newStage === 'Joining') {
+      setPrompt({ type: 'joining' })
+    } else {
+      onRefresh()
+    }
+  }
+
+  async function handleStatusChange(newStatus) {
+    const oldStatus = status
+    setStatus(newStatus)
+
+    const updates = { status: newStatus, status_changed_at: new Date().toISOString() }
+    if (newStatus === 'Invoice Raised' && row.billing_value_approx != null) {
+      updates.billing_value_final = row.billing_value_approx
+    }
+
+    await supabase.from('mandate_candidates').update(updates).eq('id', row.id)
+    await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    onRefresh()
+  }
+
+  const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
+
+  let interviewDojContent
+  if (INTERVIEW_STAGES.has(stage)) {
+    if (row.interview_date) {
+      const d = new Date(row.interview_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+      interviewDojContent = (
+        <div>
+          <span className="text-sm text-[#0F0F12]">{d}</span>
+          {row.interview_time && (
+            <span className="block text-xs text-[#999]">{row.interview_time}</span>
+          )}
+        </div>
+      )
+    } else {
+      interviewDojContent = <span className="text-[#999]">—</span>
+    }
+  } else if (stage === 'Offer' || stage === 'Joining') {
+    if (row.date_of_joining) {
+      const d = new Date(row.date_of_joining).toLocaleDateString('en-GB', {
+        day: 'numeric', month: 'short', year: 'numeric',
+      })
+      interviewDojContent = <span className="text-sm text-[#0F0F12]">{d}</span>
+    } else {
+      interviewDojContent = <span className="text-[#999]">—</span>
+    }
+  } else {
+    interviewDojContent = <span className="text-[#999]">—</span>
+  }
+
+  return (
+    <>
+      <tr
+        onClick={() => onSelect(c)}
+        className={`border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors ${rowBg}`}
+      >
+        <TD>
+          <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{c.name ?? '—'}</span>
+          <span className="text-xs text-[#999] font-mono block mt-0.5">{row.applicant_id ?? '—'}</span>
+        </TD>
+        <TD>
+          <span className="text-xs text-[#666] block">{c.phone ?? '—'}</span>
+          <span className="text-xs text-[#999] block mt-0.5 truncate max-w-[160px]">{c.email ?? '—'}</span>
+        </TD>
+        <TD>
+          <p className="text-xs font-semibold text-[#0F0F12] truncate max-w-[180px]">
+            {row.mandates?.clients?.name ?? '—'}
+          </p>
+          <p className="text-xs text-[#999] truncate max-w-[180px] mt-0.5">
+            {row.mandates?.title ?? '—'}{row.mandates?.job_id ? ` · ${row.mandates.job_id}` : ''}
+          </p>
+        </TD>
+        <TD onClick={(e) => e.stopPropagation()}>
+          <InlineDropdown
+            badge={<StageBadge value={stage || null} />}
+            options={STAGES}
+            onSelect={handleStageChange}
+          />
+        </TD>
+        <TD onClick={(e) => e.stopPropagation()}>
+          <InlineDropdown
+            badge={<StatusBadge value={status || null} />}
+            options={statusOptions}
+            onSelect={handleStatusChange}
+            disabled={!stage}
+          />
+        </TD>
+        <TD>{interviewDojContent}</TD>
+        <TD>
+          <span className="font-medium text-[#0F0F12] block text-sm truncate max-w-[130px]">
+            {row.linked_by_profile?.name ?? '—'}
+          </span>
+          <span className="text-xs text-[#999] block mt-0.5 truncate max-w-[130px]">
+            {row.mandates?.am?.name ?? '—'}
+          </span>
+        </TD>
+        <TD>
+          <InStageBadge dateStr={row.status_changed_at} />
+        </TD>
+        <TD className="text-xs text-[#999]">
+          {formatRelativeDate(row.status_changed_at)}
+        </TD>
+      </tr>
+      {prompt && (
+        <StagePromptModal
+          type={prompt.type}
+          mcId={row.id}
+          supabaseClient={supabase}
+          onClose={() => { setPrompt(null); onRefresh() }}
+        />
+      )}
+    </>
+  )
+}
+
+function NewMCTable({ rows, loading, onSelect, onRefresh }) {
+  if (loading) return <LoadingState />
+  if (rows.length === 0) return <EmptyState />
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[1100px] border-collapse">
+        <thead>
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+            <TH>Candidate</TH>
+            <TH>Contact</TH>
+            <TH>Client · Mandate</TH>
+            <TH className="w-28">Stage</TH>
+            <TH className="w-36">Status</TH>
+            <TH className="w-32">Interview / DOJ</TH>
+            <TH>Recruiter · AM</TH>
+            <TH className="w-24">In Stage</TH>
+            <TH className="w-24">Updated</TH>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <NewMCRow
+              key={row.id}
+              row={row}
+              onSelect={onSelect}
+              onRefresh={onRefresh}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ─── MC table (Talent Pool / Placed) ─────────────────────────────────────────
 
 function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
   const { session } = useAuth()
@@ -149,10 +363,9 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
   const [status, setStatus] = useState(row.status ?? '')
   const [prompt, setPrompt] = useState(null)
 
-  const c         = row.candidates ?? {}
-  const rowBg     = activeTab === 'active' ? noShowRowBg({ ...row, stage, status }) : ''
+  const c            = row.candidates ?? {}
   const isTalentPool = activeTab === 'talent_pool'
-  const changedBy = session?.user?.id
+  const changedBy    = session?.user?.id
 
   async function handleStageChange(newStage) {
     const oldStage  = stage
@@ -202,7 +415,7 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
     <>
       <tr
         onClick={() => onSelect(c)}
-        className={`border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors ${rowBg}`}
+        className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors"
       >
         <TD className="font-mono text-xs text-[#999] whitespace-nowrap">
           {row.applicant_id ?? '—'}
@@ -338,7 +551,7 @@ function UnassignedTable({ rows, loading, onSelect, onAssign }) {
         </thead>
         <tbody>
           {rows.map((row) => {
-            const bg = unassignedRowBg(row.created_at)
+            const bg  = unassignedRowBg(row.created_at)
             const age = daysSince(row.created_at)
             return (
               <tr
@@ -542,35 +755,35 @@ function AllCandidatesTable({ rows, loading, onSelect, onRefresh }) {
 
 export default function Pipeline() {
   const location = useLocation()
-  const profile = useProfile()
+  const profile  = useProfile()
   const { session } = useAuth()
   const { isRecruiter, isAccountManager, isFounder } = useRole()
 
-  const [activeTab, setActiveTab] = useState('active')
-  const [amViewMode, setAmViewMode] = useState('my_submissions') // AM only
-  const [rows, setRows] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [activeTab, setActiveTab]   = useState('pipeline')
+  const [amViewMode, setAmViewMode] = useState('my_submissions')
+  const [rows, setRows]             = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState(null)
   const [refreshToken, setRefreshToken] = useState(0)
 
-  const [search, setSearch] = useState('')
-  const [stageFilter, setStageFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [clientFilter, setClientFilter] = useState('')
+  const [search, setSearch]               = useState('')
+  const [stageFilter, setStageFilter]     = useState('')
+  const [statusFilter, setStatusFilter]   = useState('')
+  const [clientFilter, setClientFilter]   = useState('')
   const [recruiterFilter, setRecruiterFilter] = useState('')
 
   const [selectedCandidate, setSelectedCandidate] = useState(null)
-  const [pendingSelect, setPendingSelect] = useState(null)
-  const [assignTarget, setAssignTarget] = useState(null)  // { id, name }
-  const [assignToast, setAssignToast] = useState('')
+  const [pendingSelect, setPendingSelect]         = useState(null)
+  const [assignTarget, setAssignTarget]           = useState(null)
+  const [assignToast, setAssignToast]             = useState('')
 
-  const isMCTab = MC_TABS.has(activeTab)
+  const isMCTab       = MC_TABS.has(activeTab)
+  const isNewLayoutTab = NEW_LAYOUT_TABS.has(activeTab)
 
   // Auto-open panel when navigated from duplicate detection flow
   useEffect(() => {
     const openId = location.state?.openCandidateId
     if (!openId) return
-    // Clear the router state so back-navigation doesn't re-trigger
     window.history.replaceState({}, '')
     supabase
       .from('candidates')
@@ -588,10 +801,11 @@ export default function Pipeline() {
       setLoading(true)
       setError(null)
       const userId = session.user.id
-      const role = profile.role
+      const role   = profile.role
 
       if (isMCTab) {
         const statusList =
+          activeTab === 'pipeline'    ? ACTIVE_STATUSES :
           activeTab === 'active'      ? ACTIVE_STATUSES :
           activeTab === 'talent_pool' ? TALENT_POOL_STATUSES :
           PLACED_STATUSES
@@ -601,6 +815,10 @@ export default function Pipeline() {
           .select(MC_SELECT)
           .in('status', statusList)
           .order('status_changed_at', { ascending: false, nullsFirst: false })
+
+        if (activeTab === 'pipeline') {
+          query = query.in('stage', L2_ABOVE_STAGES)
+        }
 
         if (role === 'recruiter') {
           query = query.eq('linked_by', userId)
@@ -678,15 +896,16 @@ export default function Pipeline() {
 
   // ── filter options derived from rows ────────────────────────────────────────
   const stages = useMemo(
-    () => isMCTab ? [...new Set(rows.map((r) => r.stage).filter(Boolean))].sort() : [],
-    [rows, isMCTab]
+    () => (isMCTab && !isNewLayoutTab) ? [...new Set(rows.map((r) => r.stage).filter(Boolean))].sort() : [],
+    [rows, isMCTab, isNewLayoutTab]
   )
 
   const statusOptions = useMemo(() => {
     if (!isMCTab) return []
     if (stageFilter) return STAGE_STATUS_MAP[stageFilter] ?? []
+    if (isNewLayoutTab) return ALL_STATUSES_FLAT
     return [...new Set(rows.map((r) => r.status).filter(Boolean))].sort()
-  }, [rows, isMCTab, stageFilter])
+  }, [rows, isMCTab, isNewLayoutTab, stageFilter])
 
   const clients = useMemo(() => {
     if (!isMCTab) return []
@@ -718,7 +937,12 @@ export default function Pipeline() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return rows.filter((r) => {
-      if (isMCTab) {
+      if (isNewLayoutTab) {
+        if (clientFilter && r.mandates?.clients?.id !== clientFilter) return false
+        if (stageFilter && r.stage !== stageFilter) return false
+        if (statusFilter && r.status !== statusFilter) return false
+        if (recruiterFilter && r.linked_by !== recruiterFilter) return false
+      } else if (isMCTab) {
         const c = r.candidates ?? {}
         if (q && !c.name?.toLowerCase().includes(q) && !c.skill_role?.toLowerCase().includes(q)) return false
         if (stageFilter && r.stage !== stageFilter) return false
@@ -733,7 +957,7 @@ export default function Pipeline() {
       }
       return true
     })
-  }, [rows, search, stageFilter, statusFilter, clientFilter, recruiterFilter, isMCTab])
+  }, [rows, search, stageFilter, statusFilter, clientFilter, recruiterFilter, isMCTab, isNewLayoutTab])
 
   function handleTabChange(tab) {
     setActiveTab(tab)
@@ -751,6 +975,8 @@ export default function Pipeline() {
       setPendingSelect(candidate)
     }
   }
+
+  const hasActiveFilters = search || stageFilter || statusFilter || clientFilter || recruiterFilter
 
   return (
     <AppShell title="Candidates">
@@ -798,50 +1024,78 @@ export default function Pipeline() {
 
         {/* Filter bar */}
         <div className="px-6 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
-          <div className="relative">
-            <svg
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none"
-              viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
-            >
-              <circle cx="6.5" cy="6.5" r="4.5" />
-              <path d="M10.5 10.5l3 3" strokeLinecap="round" />
-            </svg>
-            <input
-              type="text"
-              placeholder={isMCTab ? 'Search name or role…' : 'Search name, role or email…'}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-56"
-            />
-          </div>
-
-          {isMCTab && (
+          {isNewLayoutTab ? (
             <>
+              <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
+                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </SelectFilter>
+
               <SelectFilter
                 value={stageFilter}
                 onChange={(v) => { setStageFilter(v); setStatusFilter('') }}
                 placeholder="All stages"
               >
-                {stages.map((s) => <option key={s} value={s}>{s}</option>)}
+                {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
               </SelectFilter>
 
               <SelectFilter value={statusFilter} onChange={setStatusFilter} placeholder="All statuses">
                 {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
               </SelectFilter>
 
-              <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </SelectFilter>
+              {!isRecruiter && recruiters.length > 0 && (
+                <SelectFilter value={recruiterFilter} onChange={setRecruiterFilter} placeholder="All recruiters">
+                  {recruiters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </SelectFilter>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="relative">
+                <svg
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none"
+                  viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
+                >
+                  <circle cx="6.5" cy="6.5" r="4.5" />
+                  <path d="M10.5 10.5l3 3" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder={isMCTab ? 'Search name or role…' : 'Search name, role or email…'}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-56"
+                />
+              </div>
+
+              {isMCTab && (
+                <>
+                  <SelectFilter
+                    value={stageFilter}
+                    onChange={(v) => { setStageFilter(v); setStatusFilter('') }}
+                    placeholder="All stages"
+                  >
+                    {stages.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </SelectFilter>
+
+                  <SelectFilter value={statusFilter} onChange={setStatusFilter} placeholder="All statuses">
+                    {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </SelectFilter>
+
+                  <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
+                    {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </SelectFilter>
+                </>
+              )}
+
+              {!isRecruiter && recruiters.length > 0 && (
+                <SelectFilter value={recruiterFilter} onChange={setRecruiterFilter} placeholder="All recruiters">
+                  {recruiters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </SelectFilter>
+              )}
             </>
           )}
 
-          {!isRecruiter && recruiters.length > 0 && (
-            <SelectFilter value={recruiterFilter} onChange={setRecruiterFilter} placeholder="All recruiters">
-              {recruiters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </SelectFilter>
-          )}
-
-          {(search || stageFilter || statusFilter || clientFilter || recruiterFilter) && (
+          {hasActiveFilters && (
             <button
               onClick={() => {
                 setSearch(''); setStageFilter(''); setStatusFilter('')
@@ -867,7 +1121,14 @@ export default function Pipeline() {
 
         {/* Table */}
         <div className="flex-1 overflow-auto">
-          {isMCTab ? (
+          {isNewLayoutTab ? (
+            <NewMCTable
+              rows={filtered}
+              loading={loading}
+              onSelect={handleSelect}
+              onRefresh={() => setRefreshToken((t) => t + 1)}
+            />
+          ) : isMCTab ? (
             <MCTable
               rows={filtered}
               loading={loading}
@@ -925,8 +1186,6 @@ export default function Pipeline() {
                 oldValue: assignTarget.oldJobId,
                 newValue: newMandate.jobId,
               })
-              // Null out the old mc record's status so it no longer matches
-              // the TALENT_POOL_STATUSES filter and drops off the Talent Pool tab.
               await supabase
                 .from('mandate_candidates')
                 .update({ status: null })
