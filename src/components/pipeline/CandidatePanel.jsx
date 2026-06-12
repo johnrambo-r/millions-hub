@@ -7,6 +7,7 @@ import {
 } from '../../lib/candidateConstants'
 import UnsavedChangesModal from '../UnsavedChangesModal'
 import { generateApplicantId } from '../../lib/generateApplicantId'
+import useRole from '../../hooks/useRole'
 
 function Field({ label, children, colSpan2 = false }) {
   return (
@@ -42,6 +43,19 @@ function formatTime(str) {
   if (isNaN(h)) return str
   const period = h >= 12 ? 'PM' : 'AM'
   return `${h % 12 || 12}:${String(m ?? 0).padStart(2, '0')} ${period}`
+}
+
+function formatDateTime(str) {
+  if (!str) return '—'
+  const d = new Date(str)
+  const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true })
+  return `${date} · ${time}`
+}
+
+function formatChangeType(str) {
+  if (!str) return '—'
+  return str.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 function formatMoney(val) {
@@ -175,8 +189,11 @@ function LinkMandateModal({ candidateId, linkedMandateIds, userId, onClose, onLi
 
 export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSelect, onPendingResolved, onPendingCancelled }) {
   const { session } = useAuth()
-  const [history, setHistory] = useState([])
-  const [historyLoading, setHistoryLoading] = useState(false)
+  const { role, loading: roleLoading } = useRole()
+  const userId = session?.user?.id
+
+  const [activityLog, setActivityLog] = useState([])
+  const [activityLogLoading, setActivityLogLoading] = useState(false)
 
   // General edit mode
   const [isEditing, setIsEditing] = useState(false)
@@ -221,7 +238,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
   useEffect(() => {
     if (!candidate) {
-      setHistory([])
+      setActivityLog([])
+      setActivityLogLoading(false)
       setIsEditing(false)
       setEditError('')
       setEditSuccess(false)
@@ -240,18 +258,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     setEditSuccess(false)
     setResumeFile(null)
     setIsDirty(false)
-
-    setHistoryLoading(true)
-    supabase
-      .from('status_history')
-      .select('id, stage, status, notes, changed_at, profiles(name)')
-      .eq('candidate_id', candidate.id)
-      .order('changed_at', { ascending: true })
-      .then(({ data, error }) => {
-        if (error) console.error('[CandidatePanel] status_history:', error.message)
-        setHistory(data ?? [])
-        setHistoryLoading(false)
-      })
 
     loadLinkedMandates(candidate.id)
   }, [candidate?.id])
@@ -296,7 +302,32 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSelect])
 
+  // Fetch activity log once both candidate and role are known
+  useEffect(() => {
+    if (!candidate?.id || roleLoading) return
+    loadActivityLog(candidate.id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate?.id, role, roleLoading])
+
   // ── Helpers ────────────────────────────────────────────────────────────────
+
+  async function loadActivityLog(candidateId) {
+    setActivityLogLoading(true)
+    let query = supabase
+      .from('activity_log')
+      .select('id, change_type, old_value, new_value, created_at, mandate_id, changed_by, profiles!changed_by(name), mandates!mandate_id(id, title, job_id)')
+      .eq('candidate_id', candidateId)
+      .order('created_at', { ascending: false })
+
+    if (role === 'recruiter') {
+      query = query.eq('changed_by', userId)
+    }
+
+    const { data, error } = await query
+    if (error) console.error('[CandidatePanel] activity_log:', error.message)
+    setActivityLog(data ?? [])
+    setActivityLogLoading(false)
+  }
 
   function loadLinkedMandates(candidateId) {
     setMandatesLoading(true)
@@ -950,37 +981,74 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
           <hr className="border-[#F0F0F4]" />
 
-          {/* Status history */}
+          {/* Activity log */}
           <div>
             <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">
-              Status history
+              Activity log
             </h3>
 
-            {historyLoading ? (
+            {activityLogLoading ? (
               <p className="text-sm text-[#999]">Loading…</p>
-            ) : history.length === 0 ? (
-              <p className="text-sm text-[#999]">No history recorded</p>
+            ) : activityLog.length === 0 ? (
+              <p className="text-sm text-[#999]">No activity recorded yet</p>
             ) : (
-              <ol className="relative border-l-2 border-[#F0F0F4] space-y-5 pl-5">
-                {history.map((h) => (
-                  <li key={h.id} className="relative">
-                    <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-[#5E6AD2] border-2 border-white" />
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <StageBadge value={h.stage} />
-                        <StatusBadge value={h.status} />
+              <div className="space-y-5">
+                {(() => {
+                  // Group entries by mandate, preserving most-recent-first order
+                  const groups = []
+                  const seen = new Map()
+                  for (const entry of activityLog) {
+                    const key = entry.mandate_id ?? '__none__'
+                    if (!seen.has(key)) {
+                      const g = { mandate: entry.mandates, entries: [] }
+                      seen.set(key, g)
+                      groups.push(g)
+                    }
+                    seen.get(key).entries.push(entry)
+                  }
+                  return groups.map((group, gi) => (
+                    <div key={gi}>
+                      {/* Mandate header */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-semibold text-[#0F0F12]">
+                          {group.mandate?.title ?? 'Unknown mandate'}
+                        </span>
+                        {group.mandate?.job_id && (
+                          <span className="font-mono text-xs text-[#999]">{group.mandate.job_id}</span>
+                        )}
                       </div>
-                      <span className="text-xs text-[#999] shrink-0 pt-0.5">{formatDate(h.changed_at)}</span>
+                      {/* Entries */}
+                      <ol className="relative border-l-2 border-[#F0F0F4] space-y-4 pl-5">
+                        {group.entries.map((entry) => (
+                          <li key={entry.id} className="relative">
+                            <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-[#5E6AD2] border-2 border-white" />
+                            <p className="text-xs text-[#999]">{formatDateTime(entry.created_at)}</p>
+                            <p className="text-sm text-[#0F0F12] mt-0.5">
+                              <span className="font-medium">{formatChangeType(entry.change_type)}</span>
+                              {(entry.old_value != null || entry.new_value != null) && (
+                                <span className="text-[#666]">
+                                  {entry.old_value != null && (
+                                    <> <span className="text-[#999]">{entry.old_value}</span></>
+                                  )}
+                                  {entry.old_value != null && entry.new_value != null && (
+                                    <span className="text-[#999]"> → </span>
+                                  )}
+                                  {entry.new_value != null && (
+                                    <span className="text-[#0F0F12] font-medium">{entry.new_value}</span>
+                                  )}
+                                </span>
+                              )}
+                            </p>
+                            {entry.profiles?.name && (
+                              <p className="text-xs text-[#999] mt-0.5">by {entry.profiles.name}</p>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
                     </div>
-                    {h.notes && (
-                      <p className="text-xs text-[#666] mt-1.5 leading-relaxed">{h.notes}</p>
-                    )}
-                    {h.profiles?.name && (
-                      <p className="text-xs text-[#999] mt-1">by {h.profiles.name}</p>
-                    )}
-                  </li>
-                ))}
-              </ol>
+                  ))
+                })()}
+              </div>
             )}
           </div>
 
