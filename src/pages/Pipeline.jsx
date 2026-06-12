@@ -32,13 +32,15 @@ const TABS = [
 // Full candidate fields so CandidatePanel has everything it needs
 const CANDIDATE_FIELDS = `
   id, name, email, phone, alt_contact,
-  current_location, preferred_location,
+  current_location, preferred_location, willing_to_relocate,
   education, year_of_passing,
   current_company, skill_role, total_exp, relevant_exp,
   emp_mode, payroll_company, notice_period,
-  current_ctc, expected_ctc,
+  current_ctc, expected_ctc, ctc_breakup,
+  source, linkedin_url, languages_known, reason_for_looking,
   comments, resume_url,
-  recruiter_id, created_at, status_changed_at,
+  offers_in_hand, lwd, dob, notable_ids,
+  recruiter_id, created_at, status_changed_at, last_updated_at,
   profiles(id, name),
   clients(id, name)
 `
@@ -52,16 +54,10 @@ const MC_SELECT = `
   mandates(id, title, clients(id, name))
 `
 
-const UNASSIGNED_SELECT = `
-  id, name, email, phone, skill_role, total_exp, recruiter_id, created_at,
-  profiles(id, name),
-  clients(id, name)
-`
+const UNASSIGNED_SELECT = CANDIDATE_FIELDS
 
 const ALL_SELECT = `
-  id, name, email, phone, skill_role, total_exp, recruiter_id, created_at,
-  profiles(id, name),
-  clients(id, name),
+  ${CANDIDATE_FIELDS},
   mandate_candidates(id, candidate_id, mandate_id, applicant_id, stage, status, status_changed_at, billing_value_approx)
 `
 
