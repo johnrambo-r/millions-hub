@@ -4,7 +4,11 @@ import AppShell from '../components/layout/AppShell'
 import { supabase } from '../lib/supabase'
 import UnsavedChangesModal from '../components/UnsavedChangesModal'
 import useRole from '../hooks/useRole'
+import { useAuth } from '../context/AuthContext'
 import { STAGES, STAGE_STATUS_MAP } from '../lib/candidateConstants'
+import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineStageStatus'
+import { StageBadge, StatusBadge as CandidateStatusBadge } from '../components/pipeline/StageBadge'
+import { logActivity } from '../lib/activityLog'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -217,10 +221,13 @@ function LinkCandidateModal({ mandateId, linkedIds, onLink, onClose }) {
 
 // ─── Candidate row (inline stage/status/billing) ─────────────────────────────
 
-const selectCls = 'h-7 w-full rounded-md border border-[#F0F0F4] bg-white px-2 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
+const inputCls = 'h-8 w-full rounded-md border border-[#F0F0F4] bg-white px-2 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
+
+const INTERVIEW_STAGES = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
 
 function CandidateRow({ mc, onRefresh }) {
   const { isFounder } = useRole()
+  const { session } = useAuth()
   const [stage, setStage] = useState(mc.stage ?? '')
   const [status, setStatus] = useState(mc.status ?? '')
   const [billingApprox, setBillingApprox] = useState(
@@ -229,45 +236,67 @@ function CandidateRow({ mc, onRefresh }) {
   const [billingFinal, setBillingFinal] = useState(mc.billing_value_final ?? null)
   const [billingFinalEditing, setBillingFinalEditing] = useState(false)
   const [billingFinalDraft, setBillingFinalDraft] = useState('')
-  const [offerDate, setOfferDate] = useState(mc.offer_date ?? '')
   const [joiningDate, setJoiningDate] = useState(mc.date_of_joining ?? '')
   const [saving, setSaving] = useState(false)
   const [unlinkConfirm, setUnlinkConfirm] = useState(false)
   const [unlinking, setUnlinking] = useState(false)
+  const [prompt, setPrompt] = useState(null)
   const billingTimer = useRef(null)
 
-  const showBilling = stage === 'Offer' || stage === 'Joining'
-  const isFinalized = billingFinal != null
+  const showBilling  = stage === 'Offer' || stage === 'Joining'
+  const isFinalized  = billingFinal != null
   const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
+  const changedBy    = session?.user?.id
 
   async function save(updates, triggerRefresh = false) {
     setSaving(true)
     const { error } = await supabase
       .from('mandate_candidates')
       .update(updates)
-      .eq('mandate_id', mc.mandate_id)
-      .eq('candidate_id', mc.candidate_id)
+      .eq('id', mc.id)
     setSaving(false)
     if (!error && triggerRefresh) onRefresh()
   }
 
-  async function handleStageChange(e) {
-    const val = e.target.value
-    setStage(val)
-    setStatus('')
-    await save({ stage: val || null, status: null }, true)
+  async function handleStageChange(newStage) {
+    const oldStage  = stage
+    const oldStatus = status
+    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
+
+    setStage(newStage)
+    setStatus(newStatus ?? '')
+
+    await save({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
+
+    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'stage', oldValue: oldStage, newValue: newStage })
+    if (oldStatus !== newStatus) {
+      await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    }
+
+    if (INTERVIEW_STAGES.has(newStage)) {
+      setPrompt({ type: 'interview' })
+    } else if (newStage === 'Offer') {
+      setPrompt({ type: 'offer' })
+    } else if (newStage === 'Joining') {
+      setPrompt({ type: 'joining' })
+    } else {
+      onRefresh()
+    }
   }
 
-  async function handleStatusChange(e) {
-    const val = e.target.value
-    setStatus(val)
-    const updates = { status: val || null, status_changed_at: new Date().toISOString() }
-    if (val === 'Invoice Raised' && !isFinalized) {
+  async function handleStatusChange(newStatus) {
+    const oldStatus = status
+    setStatus(newStatus)
+
+    const updates = { status: newStatus, status_changed_at: new Date().toISOString() }
+    if (newStatus === 'Invoice Raised' && !isFinalized) {
       const approxNum = billingApprox !== '' ? parseFloat(billingApprox) : null
       updates.billing_value_final = approxNum
       setBillingFinal(approxNum)
     }
+
     await save(updates, true)
+    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
   }
 
   function handleBillingChange(e) {
@@ -297,155 +326,149 @@ function CandidateRow({ mc, onRefresh }) {
     const { error } = await supabase
       .from('mandate_candidates')
       .delete()
-      .eq('mandate_id', mc.mandate_id)
-      .eq('candidate_id', mc.candidate_id)
+      .eq('id', mc.id)
     setUnlinking(false)
     if (!error) onRefresh()
   }
 
   return (
-    <li className="rounded-lg border border-[#F0F0F4] px-4 py-3 bg-[#FAFAFA]">
-      {unlinkConfirm ? (
-        <div className="py-1">
-          <p className="text-sm text-[#0F0F12] mb-3">
-            Are you sure you want to unlink <span className="font-medium">{mc.candidate?.name ?? 'this candidate'}</span> from this mandate?
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleUnlink}
-              disabled={unlinking}
-              className="h-7 px-3 rounded-lg text-xs font-semibold text-white bg-red-600 hover:opacity-90 disabled:opacity-50 transition"
-            >
-              {unlinking ? 'Unlinking…' : 'Confirm'}
-            </button>
-            <button
-              onClick={() => setUnlinkConfirm(false)}
-              disabled={unlinking}
-              className="h-7 px-3 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="flex items-start justify-between gap-2 mb-2.5">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
-              {mc.candidate?.skill_role && (
-                <p className="text-xs text-[#666] mt-0.5 truncate">{mc.candidate.skill_role}</p>
-              )}
-              <p className="text-xs text-[#999] mt-0.5">Linked {formatDate(mc.linked_at)}</p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {saving && <span className="text-xs text-[#999]">Saving…</span>}
+    <>
+      <li className="rounded-lg border border-[#F0F0F4] px-4 py-3 bg-[#FAFAFA]">
+        {unlinkConfirm ? (
+          <div className="py-1">
+            <p className="text-sm text-[#0F0F12] mb-3">
+              Are you sure you want to unlink <span className="font-medium">{mc.candidate?.name ?? 'this candidate'}</span> from this mandate?
+            </p>
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setUnlinkConfirm(true)}
-                className="h-7 px-2.5 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#999] hover:border-red-300 hover:text-red-600 transition"
+                onClick={handleUnlink}
+                disabled={unlinking}
+                className="h-7 px-3 rounded-lg text-xs font-semibold text-white bg-red-600 hover:opacity-90 disabled:opacity-50 transition"
               >
-                Unlink
+                {unlinking ? 'Unlinking…' : 'Confirm'}
               </button>
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${mc.submitted_to_client ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
-                {mc.submitted_to_client ? 'Submitted' : 'Not submitted'}
-              </span>
-              {mc.client_response && <ClientResponseBadge value={mc.client_response} />}
+              <button
+                onClick={() => setUnlinkConfirm(false)}
+                disabled={unlinking}
+                className="h-7 px-3 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition"
+              >
+                Cancel
+              </button>
             </div>
           </div>
+        ) : (
+          <>
+            <div className="flex items-start justify-between gap-2 mb-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
+                {mc.candidate?.skill_role && (
+                  <p className="text-xs text-[#666] mt-0.5 truncate">{mc.candidate.skill_role}</p>
+                )}
+                <p className="text-xs text-[#999] mt-0.5">Linked {formatDate(mc.linked_at)}</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {saving && <span className="text-xs text-[#999]">Saving…</span>}
+                <button
+                  onClick={() => setUnlinkConfirm(true)}
+                  className="h-7 px-2.5 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#999] hover:border-red-300 hover:text-red-600 transition"
+                >
+                  Unlink
+                </button>
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${mc.submitted_to_client ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                  {mc.submitted_to_client ? 'Submitted' : 'Not submitted'}
+                </span>
+                {mc.client_response && <ClientResponseBadge value={mc.client_response} />}
+              </div>
+            </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <select
-              value={stage}
-              onChange={handleStageChange}
-              className={selectCls}
-            >
-              <option value="">Stage</option>
-              {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <select
-              value={status}
-              onChange={handleStatusChange}
-              disabled={!stage}
-              className={`${selectCls} ${!stage ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <option value="">{stage ? 'Status' : '—'}</option>
-              {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-
-          {showBilling && (
-            <div className="mt-2">
-              <label className="text-xs text-[#999] mb-1 block">
-                {isFinalized ? 'Billing Value (₹) — final, locked' : 'Billing Value (₹)'}
-              </label>
-              {isFinalized && billingFinalEditing ? (
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={billingFinalDraft}
-                  onChange={(e) => setBillingFinalDraft(e.target.value)}
-                  onBlur={handleBillingFinalBlur}
-                  autoFocus
-                  className={`${selectCls} h-8`}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div>
+                <p className="text-xs text-[#999] mb-1">Stage</p>
+                <InlineDropdown
+                  badge={<StageBadge value={stage || null} />}
+                  options={STAGES}
+                  onSelect={handleStageChange}
                 />
-              ) : (
-                <div className="flex items-center gap-1.5">
+              </div>
+              <div>
+                <p className="text-xs text-[#999] mb-1">Status</p>
+                <InlineDropdown
+                  badge={<CandidateStatusBadge value={status || null} />}
+                  options={statusOptions}
+                  onSelect={handleStatusChange}
+                  disabled={!stage}
+                />
+              </div>
+            </div>
+
+            {showBilling && (
+              <div className="mt-2">
+                <label className="text-xs text-[#999] mb-1 block">
+                  {isFinalized ? 'Billing Value (₹) — final, locked' : 'Billing Value (₹)'}
+                </label>
+                {isFinalized && billingFinalEditing ? (
                   <input
                     type="number"
                     min={0}
                     step={1}
-                    value={isFinalized ? (billingFinal ?? '') : billingApprox}
-                    onChange={handleBillingChange}
-                    readOnly={isFinalized}
-                    placeholder="e.g. 1150000"
-                    className={`${selectCls} h-8 ${isFinalized ? 'bg-[#F5F5F8] text-[#666] cursor-not-allowed' : ''}`}
+                    value={billingFinalDraft}
+                    onChange={(e) => setBillingFinalDraft(e.target.value)}
+                    onBlur={handleBillingFinalBlur}
+                    autoFocus
+                    className={inputCls}
                   />
-                  {isFinalized && isFounder && (
-                    <button
-                      onClick={handleBillingFinalEditStart}
-                      title="Edit final billing value"
-                      className="shrink-0 text-[#999] hover:text-[#5E6AD2] transition-colors"
-                    >
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
-                        <path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={isFinalized ? (billingFinal ?? '') : billingApprox}
+                      onChange={handleBillingChange}
+                      readOnly={isFinalized}
+                      placeholder="e.g. 1150000"
+                      className={`${inputCls} ${isFinalized ? 'bg-[#F5F5F8] text-[#666] cursor-not-allowed' : ''}`}
+                    />
+                    {isFinalized && isFounder && (
+                      <button
+                        onClick={handleBillingFinalEditStart}
+                        title="Edit final billing value"
+                        className="shrink-0 text-[#999] hover:text-[#5E6AD2] transition-colors"
+                      >
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+                          <path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {stage === 'Offer' && (
-            <div className="mt-2">
-              <label className="text-xs text-[#999] mb-1 block">Offer Date</label>
-              <input
-                type="date"
-                required
-                value={offerDate}
-                onChange={(e) => setOfferDate(e.target.value)}
-                onBlur={() => save({ offer_date: offerDate || null })}
-                className={`${selectCls} h-8`}
-              />
-            </div>
-          )}
-
-          {stage === 'Joining' && (
-            <div className="mt-2">
-              <label className="text-xs text-[#999] mb-1 block">Date of Joining</label>
-              <input
-                type="date"
-                required
-                value={joiningDate}
-                onChange={(e) => setJoiningDate(e.target.value)}
-                onBlur={() => save({ date_of_joining: joiningDate || null })}
-                className={`${selectCls} h-8`}
-              />
-            </div>
-          )}
-        </>
+            {stage === 'Joining' && (
+              <div className="mt-2">
+                <label className="text-xs text-[#999] mb-1 block">Date of Joining</label>
+                <input
+                  type="date"
+                  value={joiningDate}
+                  onChange={(e) => setJoiningDate(e.target.value)}
+                  onBlur={() => save({ date_of_joining: joiningDate || null })}
+                  className={inputCls}
+                />
+              </div>
+            )}
+          </>
+        )}
+      </li>
+      {prompt && (
+        <StagePromptModal
+          type={prompt.type}
+          mcId={mc.id}
+          supabaseClient={supabase}
+          onClose={() => { setPrompt(null); onRefresh() }}
+        />
       )}
-    </li>
+    </>
   )
 }
 

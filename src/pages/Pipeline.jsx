@@ -2,13 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import { StageBadge, StatusBadge } from '../components/pipeline/StageBadge'
+import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineStageStatus'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
 import AssignMandateModal from '../components/AssignMandateModal'
 import SuccessToast from '../components/add-candidate/SuccessToast'
 import { useProfile } from '../hooks/useProfile'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
+import { logActivity } from '../lib/activityLog'
 import {
+  STAGES,
   STAGE_STATUS_MAP,
   ACTIVE_STATUSES,
   TALENT_POOL_STATUSES,
@@ -41,8 +44,9 @@ const CANDIDATE_FIELDS = `
 `
 
 const MC_SELECT = `
-  id, stage, status, applicant_id, status_changed_at, linked_by, linked_at,
+  id, candidate_id, stage, status, applicant_id, status_changed_at, linked_by, linked_at,
   interview_date, interview_time, mandate_id,
+  billing_value_approx,
   linked_by_profile:profiles!linked_by(id, name),
   candidates(${CANDIDATE_FIELDS}),
   mandates(id, title, clients(id, name))
@@ -58,10 +62,12 @@ const ALL_SELECT = `
   id, name, email, phone, skill_role, total_exp, recruiter_id, created_at,
   profiles(id, name),
   clients(id, name),
-  mandate_candidates(stage, status, status_changed_at)
+  mandate_candidates(id, candidate_id, mandate_id, applicant_id, stage, status, status_changed_at, billing_value_approx)
 `
 
 const MC_TABS = new Set(['active', 'talent_pool', 'placed'])
+
+const INTERVIEW_STAGES = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -141,7 +147,131 @@ function LoadingState() {
 
 // ─── MC table (Active / Talent Pool / Placed) ───────────────────────────────
 
-function MCTable({ rows, loading, onSelect, activeTab }) {
+function MCRow({ row, onSelect, activeTab, onRefresh }) {
+  const { session } = useAuth()
+  const [stage, setStage]   = useState(row.stage ?? '')
+  const [status, setStatus] = useState(row.status ?? '')
+  const [prompt, setPrompt] = useState(null)
+
+  const c         = row.candidates ?? {}
+  const rowBg     = activeTab === 'active' ? noShowRowBg({ ...row, stage, status }) : ''
+  const isTalentPool = activeTab === 'talent_pool'
+  const changedBy = session?.user?.id
+
+  async function handleStageChange(newStage) {
+    const oldStage  = stage
+    const oldStatus = status
+    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
+
+    setStage(newStage)
+    setStatus(newStatus ?? '')
+
+    await supabase.from('mandate_candidates')
+      .update({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
+      .eq('id', row.id)
+
+    await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'stage', oldValue: oldStage, newValue: newStage })
+    if (oldStatus !== newStatus) {
+      await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    }
+
+    if (INTERVIEW_STAGES.has(newStage)) {
+      setPrompt({ type: 'interview' })
+    } else if (newStage === 'Offer') {
+      setPrompt({ type: 'offer' })
+    } else if (newStage === 'Joining') {
+      setPrompt({ type: 'joining' })
+    } else {
+      onRefresh()
+    }
+  }
+
+  async function handleStatusChange(newStatus) {
+    const oldStatus = status
+    setStatus(newStatus)
+
+    const updates = { status: newStatus, status_changed_at: new Date().toISOString() }
+    if (newStatus === 'Invoice Raised' && row.billing_value_approx != null) {
+      updates.billing_value_final = row.billing_value_approx
+    }
+
+    await supabase.from('mandate_candidates').update(updates).eq('id', row.id)
+    await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    onRefresh()
+  }
+
+  const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
+
+  return (
+    <>
+      <tr
+        onClick={() => onSelect(c)}
+        className={`border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors ${rowBg}`}
+      >
+        <TD className="font-mono text-xs text-[#999] whitespace-nowrap">
+          {row.applicant_id ?? '—'}
+        </TD>
+        <TD>
+          <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{c.name ?? '—'}</span>
+        </TD>
+        <TD>
+          <span className="text-[#666] block truncate max-w-[140px]">{c.skill_role ?? '—'}</span>
+        </TD>
+        <TD>
+          <p className="text-xs font-medium text-[#0F0F12] truncate max-w-[170px]">
+            {row.mandates?.clients?.name ?? '—'}
+          </p>
+          <p className="text-xs text-[#999] truncate max-w-[170px] mt-0.5">
+            {row.mandates?.title ?? '—'}
+          </p>
+        </TD>
+        <TD onClick={(e) => e.stopPropagation()}>
+          <InlineDropdown
+            badge={<StageBadge value={stage || null} />}
+            options={STAGES}
+            onSelect={handleStageChange}
+          />
+        </TD>
+        <TD onClick={(e) => e.stopPropagation()}>
+          <InlineDropdown
+            badge={<StatusBadge value={status || null} />}
+            options={statusOptions}
+            onSelect={handleStatusChange}
+            disabled={!stage}
+          />
+        </TD>
+        <TD>
+          <span className="text-[#666] block truncate max-w-[110px]">
+            {row.linked_by_profile?.name ?? '—'}
+          </span>
+        </TD>
+        <TD className="text-[#666]">
+          {c.total_exp != null ? `${c.total_exp} yrs` : '—'}
+        </TD>
+        <TD className="text-xs text-[#999]">
+          {formatRelativeDate(row.status_changed_at ?? row.linked_at)}
+        </TD>
+        {isTalentPool && (
+          <TD onClick={(e) => e.stopPropagation()}>
+            <button className="h-6 px-2.5 rounded text-xs font-medium text-[#5E6AD2] border border-[#5E6AD2]/30 hover:bg-[#5E6AD2]/10 transition">
+              Re-assign
+            </button>
+          </TD>
+        )}
+      </tr>
+      {prompt && (
+        <StagePromptModal
+          type={prompt.type}
+          mcId={row.id}
+          supabaseClient={supabase}
+          onClose={() => { setPrompt(null); onRefresh() }}
+        />
+      )}
+    </>
+  )
+}
+
+function MCTable({ rows, loading, onSelect, activeTab, onRefresh }) {
   if (loading) return <LoadingState />
   if (rows.length === 0) return <EmptyState />
 
@@ -165,55 +295,15 @@ function MCTable({ rows, loading, onSelect, activeTab }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
-            const c = row.candidates ?? {}
-            const rowBg = activeTab === 'active' ? noShowRowBg(row) : ''
-            return (
-              <tr
-                key={row.id}
-                onClick={() => onSelect(c)}
-                className={`border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors ${rowBg}`}
-              >
-                <TD className="font-mono text-xs text-[#999] whitespace-nowrap">
-                  {row.applicant_id ?? '—'}
-                </TD>
-                <TD>
-                  <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{c.name ?? '—'}</span>
-                </TD>
-                <TD>
-                  <span className="text-[#666] block truncate max-w-[140px]">{c.skill_role ?? '—'}</span>
-                </TD>
-                <TD>
-                  <p className="text-xs font-medium text-[#0F0F12] truncate max-w-[170px]">
-                    {row.mandates?.clients?.name ?? '—'}
-                  </p>
-                  <p className="text-xs text-[#999] truncate max-w-[170px] mt-0.5">
-                    {row.mandates?.title ?? '—'}
-                  </p>
-                </TD>
-                <TD><StageBadge value={row.stage} /></TD>
-                <TD><StatusBadge value={row.status} /></TD>
-                <TD>
-                  <span className="text-[#666] block truncate max-w-[110px]">
-                    {row.linked_by_profile?.name ?? '—'}
-                  </span>
-                </TD>
-                <TD className="text-[#666]">
-                  {c.total_exp != null ? `${c.total_exp} yrs` : '—'}
-                </TD>
-                <TD className="text-xs text-[#999]">
-                  {formatRelativeDate(row.status_changed_at ?? row.linked_at)}
-                </TD>
-                {isTalentPool && (
-                  <TD onClick={(e) => e.stopPropagation()}>
-                    <button className="h-6 px-2.5 rounded text-xs font-medium text-[#5E6AD2] border border-[#5E6AD2]/30 hover:bg-[#5E6AD2]/10 transition">
-                      Re-assign
-                    </button>
-                  </TD>
-                )}
-              </tr>
-            )
-          })}
+          {rows.map((row) => (
+            <MCRow
+              key={row.id}
+              row={row}
+              onSelect={onSelect}
+              activeTab={activeTab}
+              onRefresh={onRefresh}
+            />
+          ))}
         </tbody>
       </table>
     </div>
@@ -292,7 +382,122 @@ function UnassignedTable({ rows, loading, onSelect, onAssign }) {
 
 // ─── All-candidates table ────────────────────────────────────────────────────
 
-function AllCandidatesTable({ rows, loading, onSelect }) {
+function AllCandidateRow({ row, onSelect, onRefresh }) {
+  const { session } = useAuth()
+  const mc = latestMC(row)
+
+  const [stage, setStage]   = useState(mc?.stage ?? '')
+  const [status, setStatus] = useState(mc?.status ?? '')
+  const [prompt, setPrompt] = useState(null)
+
+  const changedBy = session?.user?.id
+
+  async function handleStageChange(newStage) {
+    if (!mc) return
+    const oldStage  = stage
+    const oldStatus = status
+    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
+
+    setStage(newStage)
+    setStatus(newStatus ?? '')
+
+    await supabase.from('mandate_candidates')
+      .update({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
+      .eq('id', mc.id)
+
+    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'stage', oldValue: oldStage, newValue: newStage })
+    if (oldStatus !== newStatus) {
+      await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    }
+
+    if (INTERVIEW_STAGES.has(newStage)) {
+      setPrompt({ type: 'interview' })
+    } else if (newStage === 'Offer') {
+      setPrompt({ type: 'offer' })
+    } else if (newStage === 'Joining') {
+      setPrompt({ type: 'joining' })
+    } else {
+      onRefresh()
+    }
+  }
+
+  async function handleStatusChange(newStatus) {
+    if (!mc) return
+    const oldStatus = status
+    setStatus(newStatus)
+
+    const updates = { status: newStatus, status_changed_at: new Date().toISOString() }
+    if (newStatus === 'Invoice Raised' && mc.billing_value_approx != null) {
+      updates.billing_value_final = mc.billing_value_approx
+    }
+
+    await supabase.from('mandate_candidates').update(updates).eq('id', mc.id)
+    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    onRefresh()
+  }
+
+  const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
+
+  return (
+    <>
+      <tr
+        onClick={() => onSelect(row)}
+        className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors"
+      >
+        <TD className="font-mono text-xs text-[#999] whitespace-nowrap">{row.id}</TD>
+        <TD>
+          <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{row.name}</span>
+        </TD>
+        <TD>
+          <span className="text-[#666] block truncate max-w-[140px]">{row.skill_role ?? '—'}</span>
+        </TD>
+        <TD>
+          <span className="text-[#666] block truncate max-w-[120px]">{row.clients?.name ?? '—'}</span>
+        </TD>
+        <TD onClick={(e) => e.stopPropagation()}>
+          {mc ? (
+            <InlineDropdown
+              badge={<StageBadge value={stage || null} />}
+              options={STAGES}
+              onSelect={handleStageChange}
+            />
+          ) : (
+            <StageBadge value={null} />
+          )}
+        </TD>
+        <TD onClick={(e) => e.stopPropagation()}>
+          {mc ? (
+            <InlineDropdown
+              badge={<StatusBadge value={status || null} />}
+              options={statusOptions}
+              onSelect={handleStatusChange}
+              disabled={!stage}
+            />
+          ) : (
+            <StatusBadge value={null} />
+          )}
+        </TD>
+        <TD>
+          <span className="text-[#666] block truncate max-w-[110px]">{row.profiles?.name ?? '—'}</span>
+        </TD>
+        <TD className="text-[#666]">
+          {row.total_exp != null ? `${row.total_exp} yrs` : '—'}
+        </TD>
+        <TD className="text-xs text-[#999]">{formatRelativeDate(row.created_at)}</TD>
+      </tr>
+      {prompt && mc && (
+        <StagePromptModal
+          type={prompt.type}
+          mcId={mc.id}
+          supabaseClient={supabase}
+          onClose={() => { setPrompt(null); onRefresh() }}
+        />
+      )}
+    </>
+  )
+}
+
+function AllCandidatesTable({ rows, loading, onSelect, onRefresh }) {
   if (loading) return <LoadingState />
   if (rows.length === 0) return <EmptyState message="No candidates found" />
 
@@ -313,36 +518,14 @@ function AllCandidatesTable({ rows, loading, onSelect }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
-            const mc = latestMC(row)
-            return (
-              <tr
-                key={row.id}
-                onClick={() => onSelect(row)}
-                className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors"
-              >
-                <TD className="font-mono text-xs text-[#999] whitespace-nowrap">{row.id}</TD>
-                <TD>
-                  <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{row.name}</span>
-                </TD>
-                <TD>
-                  <span className="text-[#666] block truncate max-w-[140px]">{row.skill_role ?? '—'}</span>
-                </TD>
-                <TD>
-                  <span className="text-[#666] block truncate max-w-[120px]">{row.clients?.name ?? '—'}</span>
-                </TD>
-                <TD><StageBadge value={mc?.stage} /></TD>
-                <TD><StatusBadge value={mc?.status} /></TD>
-                <TD>
-                  <span className="text-[#666] block truncate max-w-[110px]">{row.profiles?.name ?? '—'}</span>
-                </TD>
-                <TD className="text-[#666]">
-                  {row.total_exp != null ? `${row.total_exp} yrs` : '—'}
-                </TD>
-                <TD className="text-xs text-[#999]">{formatRelativeDate(row.created_at)}</TD>
-              </tr>
-            )
-          })}
+          {rows.map((row) => (
+            <AllCandidateRow
+              key={row.id}
+              row={row}
+              onSelect={onSelect}
+              onRefresh={onRefresh}
+            />
+          ))}
         </tbody>
       </table>
     </div>
@@ -684,6 +867,7 @@ export default function Pipeline() {
               loading={loading}
               onSelect={handleSelect}
               activeTab={activeTab}
+              onRefresh={() => setRefreshToken((t) => t + 1)}
             />
           ) : activeTab === 'unassigned' ? (
             <UnassignedTable
@@ -693,7 +877,12 @@ export default function Pipeline() {
               onAssign={setAssignTarget}
             />
           ) : (
-            <AllCandidatesTable rows={filtered} loading={loading} onSelect={handleSelect} />
+            <AllCandidatesTable
+              rows={filtered}
+              loading={loading}
+              onSelect={handleSelect}
+              onRefresh={() => setRefreshToken((t) => t + 1)}
+            />
           )}
         </div>
       </div>
