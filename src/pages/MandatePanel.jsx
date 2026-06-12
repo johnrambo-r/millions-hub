@@ -11,6 +11,7 @@ import {
 import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineStageStatus'
 import { StageBadge, StatusBadge as CandidateStatusBadge } from '../components/pipeline/StageBadge'
 import { logActivity } from '../lib/activityLog'
+import CandidatePanel from '../components/pipeline/CandidatePanel'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -38,11 +39,14 @@ const EDITABLE_FIELDS = [
   'internal_notes', 'jd_text', 'am_id',
 ]
 
-const STAGE_ORDER       = Object.fromEntries(STAGES.map((s, i) => [s, i]))
-const PIPELINE_STAGES   = new Set(['L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining'])
-const INTERVIEW_STAGES  = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
-const ACTIVE_STATUS_SET = new Set(ACTIVE_STATUSES)
-const PLACED_STATUS_SET = new Set(PLACED_STATUSES)
+const STAGE_ORDER           = Object.fromEntries(STAGES.map((s, i) => [s, i]))
+// L2–HR only; Offer and Joining are separate counters
+const PIPELINE_STAGES       = new Set(['L2', 'L3', 'Client Onsite', 'HR'])
+// All stages at or past the interview threshold
+const INTERVIEW_OR_BEYOND   = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining'])
+const INTERVIEW_STAGES      = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
+const ACTIVE_STATUS_SET     = new Set(ACTIVE_STATUSES)
+const PLACED_STATUS_SET     = new Set(PLACED_STATUSES)
 
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
@@ -95,7 +99,7 @@ function formatTime(str) {
 function formatMoney(val) {
   if (val == null) return null
   const n = Number(val)
-  if (n >= 100000) return `₹${(n / 100000 % 1 === 0 ? n / 100000 : (n / 100000).toFixed(1))}L`
+  if (n >= 100000) return `₹${n % 100000 === 0 ? n / 100000 : (n / 100000).toFixed(1)}L`
   if (n >= 1000)   return `₹${Math.round(n / 1000)}K`
   return `₹${n}`
 }
@@ -265,28 +269,31 @@ function LinkCandidateModal({ mandateId, linkedIds, onLink, onClose }) {
 
 function SnapshotStrip({ mandateCandidates: mcs, mandate }) {
   const snap = useMemo(() => {
-    let cvsSent = 0, inPipeline = 0, interviewsScheduled = 0, offersOut = 0, placed = 0
+    let interviews = 0, offersOut = 0, placed = 0, inPipeline = 0
     for (const mc of mcs) {
       const { stage, status } = mc
-      if (stage === 'CV') cvsSent++
-      if (PIPELINE_STAGES.has(stage) && ACTIVE_STATUS_SET.has(status)) inPipeline++
-      if (INTERVIEW_STAGES.has(stage) && status === 'Scheduled') interviewsScheduled++
+      // Reached or passed the interview threshold
+      if (INTERVIEW_OR_BEYOND.has(stage)) interviews++
+      // Actively in offer stage with a live offer status
       if (stage === 'Offer' && (status === 'Offer Released' || status === 'Offer Accepted')) offersOut++
+      // Placed statuses
       if (PLACED_STATUS_SET.has(status)) placed++
+      // Actively in L2–HR with an active status
+      if (PIPELINE_STAGES.has(stage) && ACTIVE_STATUS_SET.has(status)) inPipeline++
     }
     const daysOpen = mandate?.created_at
       ? Math.floor((Date.now() - new Date(mandate.created_at)) / 86400000)
       : null
-    return { total: mcs.length, cvsSent, inPipeline, interviewsScheduled, offersOut, placed, daysOpen }
+    return { total: mcs.length, cvsSent: mcs.length, inPipeline, interviews, offersOut, placed, daysOpen }
   }, [mcs, mandate])
 
   const tiles = [
-    { label: 'Total Assigned', value: snap.total,               accent: 'text-[#0F0F12]' },
-    { label: 'CVs Sent',       value: snap.cvsSent,             accent: 'text-indigo-600' },
-    { label: 'In Pipeline',    value: snap.inPipeline,          accent: 'text-violet-600' },
-    { label: 'Interviews',     value: snap.interviewsScheduled, accent: 'text-amber-600' },
-    { label: 'Offers Out',     value: snap.offersOut,           accent: 'text-blue-600' },
-    { label: 'Placed',         value: snap.placed,              accent: 'text-emerald-600' },
+    { label: 'Total Assigned', value: snap.total,      accent: 'text-[#0F0F12]' },
+    { label: 'CVs Sent',       value: snap.cvsSent,    accent: 'text-indigo-600' },
+    { label: 'In Pipeline',    value: snap.inPipeline, accent: 'text-violet-600' },
+    { label: 'Interviews',     value: snap.interviews,  accent: 'text-amber-600' },
+    { label: 'Offers Out',     value: snap.offersOut,  accent: 'text-blue-600' },
+    { label: 'Placed',         value: snap.placed,     accent: 'text-emerald-600' },
     {
       label: 'Days Open',
       value: snap.daysOpen ?? '—',
@@ -538,7 +545,7 @@ function MandateDetailsSection({
 
 // ─── Section 3: Candidate table row ──────────────────────────────────────────
 
-function CandidateTableRow({ mc, onRefresh }) {
+function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
   const { session }         = useAuth()
   const [stage, setStage]   = useState(mc.stage ?? '')
   const [status, setStatus] = useState(mc.status ?? '')
@@ -616,7 +623,7 @@ function CandidateTableRow({ mc, onRefresh }) {
             {unlinking ? 'Unlinking…' : 'Confirm'}
           </button>
           <button
-            onClick={() => setUnlinkConfirm(false)}
+            onClick={(e) => { e.stopPropagation(); setUnlinkConfirm(false) }}
             disabled={unlinking}
             className="h-7 px-3 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition shrink-0"
           >
@@ -629,20 +636,23 @@ function CandidateTableRow({ mc, onRefresh }) {
 
   return (
     <>
-      <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors group items-start`}>
-
+      <div
+        className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors group items-start cursor-pointer`}
+        onClick={() => onRowClick(mc.candidate_id)}
+      >
         {/* Col 1: Candidate name + applicant ID */}
         <div className="min-w-0 py-0.5">
           <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
           <p className="text-xs text-[#999] mt-0.5 font-mono">{mc.applicant_id ?? '—'}</p>
         </div>
 
-        {/* Col 2: Stage */}
+        {/* Col 2: Stage — stopPropagation is inside InlineDropdown's button */}
         <div className="py-0.5">
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
             options={STAGES}
             onSelect={handleStageChange}
+            disabled={!canEdit}
           />
         </div>
 
@@ -652,7 +662,7 @@ function CandidateTableRow({ mc, onRefresh }) {
             badge={<CandidateStatusBadge value={status || null} />}
             options={statusOptions}
             onSelect={handleStatusChange}
-            disabled={!stage}
+            disabled={!canEdit || !stage}
           />
         </div>
 
@@ -692,10 +702,10 @@ function CandidateTableRow({ mc, onRefresh }) {
         {/* Col 6: Last updated */}
         <div className="text-xs text-[#999] whitespace-nowrap py-0.5">{formatRelDate(lastUpdated)}</div>
 
-        {/* Col 7: Unlink button (appears on hover) */}
+        {/* Col 7: Unlink (hover-only, stopPropagation so row click doesn't fire) */}
         <div className="flex justify-end py-0.5">
           <button
-            onClick={() => setUnlinkConfirm(true)}
+            onClick={(e) => { e.stopPropagation(); setUnlinkConfirm(true) }}
             title="Unlink candidate"
             className="w-7 h-7 flex items-center justify-center rounded text-[#CCC] hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
           >
@@ -720,10 +730,10 @@ function CandidateTableRow({ mc, onRefresh }) {
 
 // ─── Section 3: Candidate list ────────────────────────────────────────────────
 
-function CandidateList({ mandateId, mandateCandidates, loading, onRefresh }) {
-  const [sortBy, setSortBy]       = useState('last_updated')
+function CandidateList({ mandateId, mandateCandidates, loading, onRefresh, onRowClick, currentUserId, isRecruiter }) {
+  const [sortBy, setSortBy]           = useState('last_updated')
   const [filterStage, setFilterStage] = useState('')
-  const [showModal, setShowModal] = useState(false)
+  const [showModal, setShowModal]     = useState(false)
 
   const linkedIds = useMemo(
     () => new Set(mandateCandidates.map((mc) => mc.candidate_id)),
@@ -731,9 +741,12 @@ function CandidateList({ mandateId, mandateCandidates, loading, onRefresh }) {
   )
 
   const displayed = useMemo(() => {
-    let list = filterStage
-      ? mandateCandidates.filter((mc) => mc.stage === filterStage)
+    // Recruiters see only their own linked candidates
+    let list = isRecruiter
+      ? mandateCandidates.filter((mc) => mc.linked_by === currentUserId)
       : [...mandateCandidates]
+
+    if (filterStage) list = list.filter((mc) => mc.stage === filterStage)
 
     if (sortBy === 'stage') {
       list.sort((a, b) => (STAGE_ORDER[a.stage] ?? 99) - (STAGE_ORDER[b.stage] ?? 99))
@@ -747,7 +760,7 @@ function CandidateList({ mandateId, mandateCandidates, loading, onRefresh }) {
       list.sort((a, b) => daysInStage(b) - daysInStage(a))
     }
     return list
-  }, [mandateCandidates, sortBy, filterStage])
+  }, [mandateCandidates, sortBy, filterStage, isRecruiter, currentUserId])
 
   return (
     <div>
@@ -775,16 +788,18 @@ function CandidateList({ mandateId, mandateCandidates, loading, onRefresh }) {
             {displayed.length}{filterStage ? ` of ${mandateCandidates.length}` : ''} candidate{displayed.length !== 1 ? 's' : ''}
           </span>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="h-8 px-3 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 flex items-center gap-1.5 shrink-0"
-          style={{ backgroundColor: '#5E6AD2' }}
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-            <path d="M8 3v10M3 8h10" strokeLinecap="round" />
-          </svg>
-          Link Candidate
-        </button>
+        {!isRecruiter && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="h-8 px-3 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 flex items-center gap-1.5 shrink-0"
+            style={{ backgroundColor: '#5E6AD2' }}
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+              <path d="M8 3v10M3 8h10" strokeLinecap="round" />
+            </svg>
+            Link Candidate
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -805,9 +820,19 @@ function CandidateList({ mandateId, mandateCandidates, loading, onRefresh }) {
             <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Updated</span>
             <span />
           </div>
-          {displayed.map((mc) => (
-            <CandidateTableRow key={mc.id} mc={mc} onRefresh={onRefresh} />
-          ))}
+          {displayed.map((mc) => {
+            // Recruiters can only edit rows they personally linked
+            const canEdit = !isRecruiter || mc.linked_by === currentUserId
+            return (
+              <CandidateTableRow
+                key={mc.id}
+                mc={mc}
+                onRefresh={onRefresh}
+                onRowClick={onRowClick}
+                canEdit={canEdit}
+              />
+            )
+          })}
         </>
       )}
 
@@ -829,6 +854,8 @@ export default function MandatePanel() {
   const { id }       = useParams()
   const navigate     = useNavigate()
   const { isRecruiter, loading: roleLoading } = useRole()
+  const { session }  = useAuth()
+  const currentUserId = session?.user?.id
 
   const [mandate, setMandate]                     = useState(null)
   const [loading, setLoading]                     = useState(true)
@@ -850,11 +877,14 @@ export default function MandatePanel() {
   const [dialogSaving, setDialogSaving] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(true)
 
+  // Candidate Panel state
+  const [panelCandidate, setPanelCandidate] = useState(null)
+
   const originalFieldsRef     = useRef({})
   const originalRecruitersRef = useRef([])
   const detailsDefaultSet     = useRef(false)
 
-  // Set details section default open state based on role (once, after role loads)
+  // Set details section default based on role (once, after role loads)
   useEffect(() => {
     if (!roleLoading && !detailsDefaultSet.current) {
       detailsDefaultSet.current = true
@@ -929,6 +959,16 @@ export default function MandatePanel() {
       .filter((mc) => mc.linked_by && !seen.has(mc.linked_by) && seen.add(mc.linked_by))
       .map((mc) => mc.linked_by_profile ?? { id: mc.linked_by, name: 'Unknown' })
   }, [mandateCandidates])
+
+  // Fetch full candidate on row click → open CandidatePanel
+  async function handleRowClick(candidateId) {
+    const { data } = await supabase
+      .from('candidates')
+      .select('*, profiles(id, name), clients(id, name)')
+      .eq('id', candidateId)
+      .single()
+    setPanelCandidate(data ?? null)
+  }
 
   // Dirty tracking
   useEffect(() => {
@@ -1151,6 +1191,16 @@ export default function MandatePanel() {
         mandateCandidates={mandateCandidates}
         loading={candidatesLoading}
         onRefresh={fetchCandidates}
+        onRowClick={handleRowClick}
+        currentUserId={currentUserId}
+        isRecruiter={isRecruiter}
+      />
+
+      {/* Candidate Panel (slide-in) */}
+      <CandidatePanel
+        candidate={panelCandidate}
+        onClose={() => setPanelCandidate(null)}
+        onUpdate={() => {}}
       />
 
       {dialog && (

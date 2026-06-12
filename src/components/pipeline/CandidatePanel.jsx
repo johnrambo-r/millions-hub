@@ -31,6 +31,39 @@ function formatDate(str) {
   return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+function formatDateShort(str) {
+  if (!str) return null
+  return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+function formatTime(str) {
+  if (!str) return ''
+  const [h, m] = str.split(':').map(Number)
+  if (isNaN(h)) return str
+  const period = h >= 12 ? 'PM' : 'AM'
+  return `${h % 12 || 12}:${String(m ?? 0).padStart(2, '0')} ${period}`
+}
+
+function formatMoney(val) {
+  if (val == null) return null
+  const n = Number(val)
+  if (n >= 100000) return `₹${n % 100000 === 0 ? n / 100000 : (n / 100000).toFixed(1)}L`
+  if (n >= 1000)   return `₹${Math.round(n / 1000)}K`
+  return `₹${n}`
+}
+
+function daysInStageMC(mc) {
+  const ref = mc.status_changed_at ?? mc.linked_at
+  if (!ref) return 0
+  return Math.floor((Date.now() - new Date(ref)) / 86400000)
+}
+
+function daysBadgeColor(days) {
+  if (days >= 14) return 'text-red-600 bg-red-50'
+  if (days >= 7)  return 'text-amber-600 bg-amber-50'
+  return 'text-[#666] bg-[#F5F5F8]'
+}
+
 function CloseIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5">
@@ -262,7 +295,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     setMandatesLoading(true)
     supabase
       .from('mandate_candidates')
-      .select('id, mandate_id, stage, status, applicant_id, mandates(id, title, clients(id, name))')
+      .select('id, mandate_id, stage, status, applicant_id, status_changed_at, linked_at, interview_date, interview_time, offered_ctc, billing_value_approx, billing_value_final, date_of_joining, mandates(id, title, job_id, clients(id, name))')
       .eq('candidate_id', candidateId)
       .order('linked_at', { ascending: false })
       .then(({ data, error }) => {
@@ -745,11 +778,11 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
           <hr className="border-[#F0F0F4]" />
 
-          {/* Mandates */}
+          {/* Mandate Activity */}
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider">
-                Mandates
+                Mandate Activity
               </h3>
               <button
                 onClick={() => setShowLinkModal(true)}
@@ -764,20 +797,72 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
             ) : linkedMandates.length === 0 ? (
               <p className="text-sm text-[#999]">Not linked to any mandates</p>
             ) : (
-              <ul className="space-y-2">
-                {linkedMandates.map((mc) => (
-                  <li key={mc.id} className="rounded-lg border border-[#F0F0F4] px-3 py-2.5">
-                    <p className="text-sm font-medium text-[#0F0F12]">{mc.mandates?.title}</p>
-                    <p className="text-xs text-[#999] mt-0.5">{mc.mandates?.clients?.name}</p>
-                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                      {mc.stage && <StageBadge value={mc.stage} />}
-                      {mc.status && <StatusBadge value={mc.status} />}
-                      {mc.applicant_id && (
-                        <span className="font-mono text-xs text-[#999]">{mc.applicant_id}</span>
+              <ul className="space-y-3">
+                {linkedMandates.map((mc) => {
+                  const days = daysInStageMC(mc)
+                  const interviewLine = mc.interview_date
+                    ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime(mc.interview_time) : null].filter(Boolean).join(' · ')
+                    : null
+                  return (
+                    <li key={mc.id} className="rounded-lg border border-[#F0F0F4] px-3 py-3">
+                      {/* Mandate title + client */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-[#0F0F12] truncate">
+                            {mc.mandates?.title ?? '—'}
+                            {mc.mandates?.job_id && (
+                              <span className="font-mono text-xs text-[#999] ml-1.5">{mc.mandates.job_id}</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-[#999] mt-0.5">{mc.mandates?.clients?.name}</p>
+                        </div>
+                        {mc.applicant_id && (
+                          <span className="font-mono text-xs text-[#999] shrink-0">{mc.applicant_id}</span>
+                        )}
+                      </div>
+
+                      {/* Stage + Status + Days in stage */}
+                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                        {mc.stage  && <StageBadge value={mc.stage} />}
+                        {mc.status && <StatusBadge value={mc.status} />}
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${daysBadgeColor(days)}`}>
+                          {days}d
+                        </span>
+                      </div>
+
+                      {/* Contextual details — shown only if populated */}
+                      {(interviewLine || mc.offered_ctc != null || mc.billing_value_approx != null || mc.billing_value_final != null || mc.date_of_joining) && (
+                        <div className="mt-2 space-y-0.5">
+                          {interviewLine && (
+                            <p className="text-xs text-[#555]">
+                              <span className="text-[#999] mr-1">Interview</span>{interviewLine}
+                            </p>
+                          )}
+                          {mc.offered_ctc != null && (
+                            <p className="text-xs text-[#555]">
+                              <span className="text-[#999] mr-1">Offered CTC</span>{formatMoney(mc.offered_ctc)}
+                            </p>
+                          )}
+                          {mc.billing_value_approx != null && (
+                            <p className="text-xs text-[#555]">
+                              <span className="text-[#999] mr-1">Billing</span>{formatMoney(mc.billing_value_approx)}
+                            </p>
+                          )}
+                          {mc.billing_value_final != null && (
+                            <p className="text-xs text-[#555]">
+                              <span className="text-[#999] mr-1">Final Billing</span>{formatMoney(mc.billing_value_final)}
+                            </p>
+                          )}
+                          {mc.date_of_joining && (
+                            <p className="text-xs text-[#555]">
+                              <span className="text-[#999] mr-1">DOJ</span>{formatDateShort(mc.date_of_joining)}
+                            </p>
+                          )}
+                        </div>
                       )}
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
