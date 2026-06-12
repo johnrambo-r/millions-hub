@@ -895,25 +895,34 @@ export default function Pipeline() {
   }, [profile, session, activeTab, amViewMode, refreshToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── filter options derived from rows ────────────────────────────────────────
-  const stages = useMemo(
-    () => (isMCTab && !isNewLayoutTab) ? [...new Set(rows.map((r) => r.stage).filter(Boolean))].sort() : [],
-    [rows, isMCTab, isNewLayoutTab]
-  )
+  const stages = useMemo(() => {
+    if (isMCTab && !isNewLayoutTab) return [...new Set(rows.map((r) => r.stage).filter(Boolean))].sort()
+    if (activeTab === 'all') return [...new Set(rows.map((r) => latestMC(r)?.stage).filter(Boolean))].sort()
+    return []
+  }, [rows, isMCTab, isNewLayoutTab, activeTab])
 
   const statusOptions = useMemo(() => {
-    if (!isMCTab) return []
+    if (!isMCTab && activeTab !== 'all') return []
     if (stageFilter) return STAGE_STATUS_MAP[stageFilter] ?? []
     if (isNewLayoutTab) return ALL_STATUSES_FLAT
+    if (activeTab === 'all') return [...new Set(rows.map((r) => latestMC(r)?.status).filter(Boolean))].sort()
     return [...new Set(rows.map((r) => r.status).filter(Boolean))].sort()
-  }, [rows, isMCTab, isNewLayoutTab, stageFilter])
+  }, [rows, isMCTab, isNewLayoutTab, stageFilter, activeTab])
 
   const clients = useMemo(() => {
-    if (!isMCTab) return []
     const seen = new Map()
-    rows.forEach((r) => {
-      const c = r.mandates?.clients
-      if (c?.id) seen.set(c.id, c)
-    })
+    if (isMCTab) {
+      rows.forEach((r) => {
+        const c = r.mandates?.clients
+        if (c?.id) seen.set(c.id, c)
+      })
+    } else {
+      // unassigned and all tabs: client is a direct field on the candidate row
+      rows.forEach((r) => {
+        const c = r.clients
+        if (c?.id) seen.set(c.id, c)
+      })
+    }
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [rows, isMCTab])
 
@@ -938,6 +947,10 @@ export default function Pipeline() {
     const q = search.toLowerCase()
     return rows.filter((r) => {
       if (isNewLayoutTab) {
+        const c = r.candidates ?? {}
+        if (q && !c.name?.toLowerCase().includes(q) &&
+            !c.phone?.toLowerCase().includes(q) &&
+            !c.email?.toLowerCase().includes(q)) return false
         if (clientFilter && r.mandates?.clients?.id !== clientFilter) return false
         if (stageFilter && r.stage !== stageFilter) return false
         if (statusFilter && r.status !== statusFilter) return false
@@ -949,15 +962,26 @@ export default function Pipeline() {
         if (statusFilter && r.status !== statusFilter) return false
         if (clientFilter && r.mandates?.clients?.id !== clientFilter) return false
         if (recruiterFilter && r.linked_by !== recruiterFilter) return false
-      } else {
+      } else if (activeTab === 'all') {
         if (q && !r.name?.toLowerCase().includes(q) &&
             !r.skill_role?.toLowerCase().includes(q) &&
             !r.email?.toLowerCase().includes(q)) return false
+        if (clientFilter && r.clients?.id !== clientFilter) return false
+        const mc = latestMC(r)
+        if (stageFilter && mc?.stage !== stageFilter) return false
+        if (statusFilter && mc?.status !== statusFilter) return false
+        if (recruiterFilter && r.recruiter_id !== recruiterFilter) return false
+      } else {
+        // unassigned
+        if (q && !r.name?.toLowerCase().includes(q) &&
+            !r.skill_role?.toLowerCase().includes(q) &&
+            !r.email?.toLowerCase().includes(q)) return false
+        if (clientFilter && r.clients?.id !== clientFilter) return false
         if (recruiterFilter && r.recruiter_id !== recruiterFilter) return false
       }
       return true
     })
-  }, [rows, search, stageFilter, statusFilter, clientFilter, recruiterFilter, isMCTab, isNewLayoutTab])
+  }, [rows, search, stageFilter, statusFilter, clientFilter, recruiterFilter, isMCTab, isNewLayoutTab, activeTab])
 
   function handleTabChange(tab) {
     setActiveTab(tab)
@@ -1024,75 +1048,58 @@ export default function Pipeline() {
 
         {/* Filter bar */}
         <div className="px-6 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
-          {isNewLayoutTab ? (
-            <>
-              <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </SelectFilter>
+          {/* Search — all tabs */}
+          <div className="relative">
+            <svg
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none"
+              viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
+            >
+              <circle cx="6.5" cy="6.5" r="4.5" />
+              <path d="M10.5 10.5l3 3" strokeLinecap="round" />
+            </svg>
+            <input
+              type="text"
+              placeholder={
+                isNewLayoutTab ? 'Search name, phone or email…' :
+                isMCTab        ? 'Search name or role…' :
+                                 'Search name, role or email…'
+              }
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-56"
+            />
+          </div>
 
-              <SelectFilter
-                value={stageFilter}
-                onChange={(v) => { setStageFilter(v); setStatusFilter('') }}
-                placeholder="All stages"
-              >
-                {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </SelectFilter>
+          {/* Client — all tabs */}
+          <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </SelectFilter>
 
-              <SelectFilter value={statusFilter} onChange={setStatusFilter} placeholder="All statuses">
-                {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-              </SelectFilter>
+          {/* Stage — MC tabs + All (not Unassigned) */}
+          {(isMCTab || activeTab === 'all') && (
+            <SelectFilter
+              value={stageFilter}
+              onChange={(v) => { setStageFilter(v); setStatusFilter('') }}
+              placeholder="All stages"
+            >
+              {(isNewLayoutTab ? STAGES : stages).map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </SelectFilter>
+          )}
 
-              {!isRecruiter && recruiters.length > 0 && (
-                <SelectFilter value={recruiterFilter} onChange={setRecruiterFilter} placeholder="All recruiters">
-                  {recruiters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </SelectFilter>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="relative">
-                <svg
-                  className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none"
-                  viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
-                >
-                  <circle cx="6.5" cy="6.5" r="4.5" />
-                  <path d="M10.5 10.5l3 3" strokeLinecap="round" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder={isMCTab ? 'Search name or role…' : 'Search name, role or email…'}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-56"
-                />
-              </div>
+          {/* Status — MC tabs + All (not Unassigned) */}
+          {(isMCTab || activeTab === 'all') && (
+            <SelectFilter value={statusFilter} onChange={setStatusFilter} placeholder="All statuses">
+              {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </SelectFilter>
+          )}
 
-              {isMCTab && (
-                <>
-                  <SelectFilter
-                    value={stageFilter}
-                    onChange={(v) => { setStageFilter(v); setStatusFilter('') }}
-                    placeholder="All stages"
-                  >
-                    {stages.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </SelectFilter>
-
-                  <SelectFilter value={statusFilter} onChange={setStatusFilter} placeholder="All statuses">
-                    {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </SelectFilter>
-
-                  <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
-                    {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </SelectFilter>
-                </>
-              )}
-
-              {!isRecruiter && recruiters.length > 0 && (
-                <SelectFilter value={recruiterFilter} onChange={setRecruiterFilter} placeholder="All recruiters">
-                  {recruiters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </SelectFilter>
-              )}
-            </>
+          {/* Recruiter — all tabs, non-recruiter users only */}
+          {!isRecruiter && recruiters.length > 0 && (
+            <SelectFilter value={recruiterFilter} onChange={setRecruiterFilter} placeholder="All recruiters">
+              {recruiters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </SelectFilter>
           )}
 
           {hasActiveFilters && (
