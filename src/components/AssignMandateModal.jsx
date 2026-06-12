@@ -32,8 +32,8 @@ export default function AssignMandateModal({ candidateId, candidateName, onClose
   const [status, setStatus] = useState('FB Pending')
   const [interviewDate, setInterviewDate] = useState('')
   const [interviewTime, setInterviewTime] = useState('')
+  const [offeredCtc, setOfferedCtc] = useState('')
   const [billingApprox, setBillingApprox] = useState('')
-  const [offerDate, setOfferDate] = useState('')
   const [joiningDate, setJoiningDate] = useState('')
 
   const [confirming, setConfirming] = useState(false)
@@ -69,8 +69,8 @@ export default function AssignMandateModal({ candidateId, candidateName, onClose
     setStatus(STAGE_STATUS_MAP[newStage]?.[0] ?? '')
     setInterviewDate('')
     setInterviewTime('')
+    setOfferedCtc('')
     setBillingApprox('')
-    setOfferDate('')
     setJoiningDate('')
   }
 
@@ -96,13 +96,14 @@ export default function AssignMandateModal({ candidateId, candidateName, onClose
       }
 
       if (BILLING_STAGES.includes(stage)) {
+        const ctcNum = offeredCtc !== '' ? parseFloat(offeredCtc) : null
         const approxNum = billingApprox !== '' ? parseFloat(billingApprox) : null
+        if (ctcNum != null) payload.offered_ctc = ctcNum
         if (approxNum != null) {
           payload.billing_value_approx = approxNum
           // Invoice Raised locks approx → final
           if (isInvoiceRaised) payload.billing_value_final = approxNum
         }
-        if (offerDate) payload.offer_date = offerDate
         if (joiningDate) payload.date_of_joining = joiningDate
       }
 
@@ -204,38 +205,45 @@ export default function AssignMandateModal({ candidateId, candidateName, onClose
             {/* Billing fields — Offer and Joining stages */}
             {BILLING_STAGES.includes(stage) && (
               <>
-                <div>
-                  <label className={labelCls}>
-                    Offered CTC / Billing Amount <span className="text-[#999] font-normal">(optional)</span>
-                    {isInvoiceRaised && <span className="ml-1 text-[#D93025] font-normal">— locked on Invoice Raised</span>}
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={billingApprox}
-                    onChange={(e) => setBillingApprox(e.target.value)}
-                    disabled={isInvoiceRaised}
-                    placeholder="e.g. 1200000"
-                    className={fldCls}
-                  />
-                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={labelCls}>Offer Date <span className="text-[#999] font-normal">(optional)</span></label>
-                    <input type="date" value={offerDate} onChange={(e) => setOfferDate(e.target.value)} className={fldCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>
-                      Date of Joining <span className="text-[#999] font-normal">(optional)</span>
-                    </label>
+                    <label className={labelCls}>Offered CTC <span className="text-[#999] font-normal">(optional)</span></label>
                     <input
-                      type="date"
-                      value={joiningDate}
-                      onChange={(e) => setJoiningDate(e.target.value)}
-                      disabled={isInvoiceRaised}
+                      type="number"
+                      min="0"
+                      value={offeredCtc}
+                      onChange={(e) => setOfferedCtc(e.target.value)}
+                      placeholder="e.g. 1200000"
                       className={fldCls}
                     />
                   </div>
+                  <div>
+                    <label className={labelCls}>
+                      Billing Amount <span className="text-[#999] font-normal">(optional)</span>
+                      {isInvoiceRaised && <span className="ml-1 text-[#D93025] font-normal">locked</span>}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={billingApprox}
+                      onChange={(e) => setBillingApprox(e.target.value)}
+                      disabled={isInvoiceRaised}
+                      placeholder="e.g. 120000"
+                      className={fldCls}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>
+                    Date of Joining <span className="text-[#999] font-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={joiningDate}
+                    onChange={(e) => setJoiningDate(e.target.value)}
+                    disabled={isInvoiceRaised}
+                    className={fldCls}
+                  />
                 </div>
               </>
             )}
@@ -282,10 +290,10 @@ export default function AssignMandateModal({ candidateId, candidateName, onClose
                   Interview: {interviewDate || '—'}{interviewTime ? ` at ${interviewTime}` : ''}
                 </p>
               )}
-              {BILLING_STAGES.includes(stage) && (billingApprox || offerDate || joiningDate) && (
+              {BILLING_STAGES.includes(stage) && (offeredCtc || billingApprox || joiningDate) && (
                 <div className="mt-1 space-y-0.5">
+                  {offeredCtc && <p className="text-xs text-[#999]">Offered CTC: {offeredCtc}</p>}
                   {billingApprox && <p className="text-xs text-[#999]">Billing Amount: {billingApprox}</p>}
-                  {offerDate && <p className="text-xs text-[#999]">Offer Date: {offerDate}</p>}
                   {joiningDate && <p className="text-xs text-[#999]">Date of Joining: {joiningDate}</p>}
                 </div>
               )}
