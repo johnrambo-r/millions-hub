@@ -64,6 +64,13 @@ function daysBadgeColor(days) {
   return 'text-[#666] bg-[#F5F5F8]'
 }
 
+function safeParseJson(str) {
+  if (!str) return null
+  try { return JSON.parse(str) } catch { return null }
+}
+
+const SOURCE_OPTIONS = ['Naukri', 'LinkedIn', 'Referral', 'Database', 'Direct Approach', 'Other']
+
 function CloseIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5">
@@ -352,25 +359,39 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
   function handleEditStart() {
     setResumeFile(null)
+    const ctcParsed    = safeParseJson(candidate.ctc_breakup)
+    const offersParsed = safeParseJson(candidate.offers_in_hand)
     const fields = {
-      name:               candidate.name ?? '',
-      email:              candidate.email ?? '',
-      phone:              candidate.phone ?? '',
-      alt_contact:        candidate.alt_contact ?? '',
-      current_location:   candidate.current_location ?? '',
-      preferred_location: candidate.preferred_location ?? '',
-      education:          candidate.education ?? '',
-      year_of_passing:    candidate.year_of_passing?.toString() ?? '',
-      current_company:    candidate.current_company ?? '',
-      skill_role:         candidate.skill_role ?? '',
-      total_exp:          candidate.total_exp?.toString() ?? '',
-      relevant_exp:       candidate.relevant_exp?.toString() ?? '',
-      emp_mode:           candidate.emp_mode ?? '',
-      payroll_company:    candidate.payroll_company ?? '',
-      notice_period:      candidate.notice_period ?? '',
-      current_ctc:        candidate.current_ctc?.toString() ?? '',
-      expected_ctc:       candidate.expected_ctc?.toString() ?? '',
-      comments:           candidate.comments ?? '',
+      name:                 candidate.name ?? '',
+      email:                candidate.email ?? '',
+      phone:                candidate.phone ?? '',
+      alt_contact:          candidate.alt_contact ?? '',
+      current_location:     candidate.current_location ?? '',
+      preferred_location:   candidate.preferred_location ?? '',
+      education:            candidate.education ?? '',
+      year_of_passing:      candidate.year_of_passing?.toString() ?? '',
+      current_company:      candidate.current_company ?? '',
+      skill_role:           candidate.skill_role ?? '',
+      total_exp:            candidate.total_exp?.toString() ?? '',
+      relevant_exp:         candidate.relevant_exp?.toString() ?? '',
+      emp_mode:             candidate.emp_mode ?? '',
+      payroll_company:      candidate.payroll_company ?? '',
+      notice_period:        candidate.notice_period ?? '',
+      current_ctc:          candidate.current_ctc?.toString() ?? '',
+      expected_ctc:         candidate.expected_ctc?.toString() ?? '',
+      comments:             candidate.comments ?? '',
+      source:               candidate.source ?? '',
+      linkedin_url:         candidate.linkedin_url ?? '',
+      willing_to_relocate:  candidate.willing_to_relocate ?? false,
+      reason_for_looking:   candidate.reason_for_looking ?? '',
+      languages_known:      candidate.languages_known ?? '',
+      ctc_breakup_fixed:    ctcParsed?.fixed    != null ? String(ctcParsed.fixed)    : '',
+      ctc_breakup_variable: ctcParsed?.variable != null ? String(ctcParsed.variable) : '',
+      offers_count:         offersParsed?.count   != null ? String(offersParsed.count)   : '',
+      offers_details:       offersParsed?.details ?? '',
+      lwd:                  candidate.lwd ?? '',
+      dob:                  candidate.dob ?? '',
+      notable_ids:          candidate.notable_ids ?? '',
     }
     originalFieldsRef.current = { ...fields }
     setEditFields(fields)
@@ -453,7 +474,27 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       current_ctc:        editFields.current_ctc !== '' ? parseFloat(editFields.current_ctc) : null,
       expected_ctc:       editFields.expected_ctc !== '' ? parseFloat(editFields.expected_ctc) : null,
       comments:           editFields.comments.trim() || null,
-      last_updated_at:    new Date().toISOString(),
+      source:             editFields.source || null,
+      linkedin_url:       editFields.linkedin_url.trim() || null,
+      willing_to_relocate: editFields.willing_to_relocate ?? false,
+      reason_for_looking: editFields.reason_for_looking.trim() || null,
+      languages_known:    editFields.languages_known.trim() || null,
+      ctc_breakup: (editFields.ctc_breakup_fixed || editFields.ctc_breakup_variable)
+        ? JSON.stringify({
+            fixed:    editFields.ctc_breakup_fixed    !== '' ? parseFloat(editFields.ctc_breakup_fixed)    : null,
+            variable: editFields.ctc_breakup_variable !== '' ? parseFloat(editFields.ctc_breakup_variable) : null,
+          })
+        : null,
+      offers_in_hand: (editFields.offers_count || editFields.offers_details)
+        ? JSON.stringify({
+            count:   editFields.offers_count !== '' ? parseInt(editFields.offers_count, 10) : null,
+            details: editFields.offers_details.trim() || null,
+          })
+        : null,
+      lwd:         editFields.lwd         || null,
+      dob:         editFields.dob         || null,
+      notable_ids: editFields.notable_ids.trim() || null,
+      last_updated_at: new Date().toISOString(),
       ...(newResumeUrl !== undefined && { resume_url: newResumeUrl }),
     }
 
@@ -651,6 +692,29 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                     className={`${fldCls} h-auto py-2 resize-none`}
                   />
                 </EditField>
+                <EditField label="Source">
+                  <select value={editFields.source || ''} onChange={(e) => setEditField('source', e.target.value)} className={fldCls}>
+                    <option value="">Select</option>
+                    {SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </EditField>
+                <EditField label="LinkedIn URL">
+                  <input type="url" value={editFields.linkedin_url || ''} onChange={(e) => setEditField('linkedin_url', e.target.value)} className={fldCls} placeholder="https://linkedin.com/in/…" />
+                </EditField>
+                <EditField label="Willing to relocate">
+                  <div className="flex rounded-lg overflow-hidden border border-[#F0F0F4] h-9">
+                    <button type="button" onClick={() => setEditField('willing_to_relocate', true)}
+                      className={`flex-1 text-sm font-medium transition ${editFields.willing_to_relocate ? 'bg-[#5E6AD2] text-white' : 'bg-white text-[#666] hover:bg-[#F5F5F8]'}`}>Yes</button>
+                    <button type="button" onClick={() => setEditField('willing_to_relocate', false)}
+                      className={`flex-1 text-sm font-medium transition ${!editFields.willing_to_relocate ? 'bg-[#5E6AD2] text-white' : 'bg-white text-[#666] hover:bg-[#F5F5F8]'}`}>No</button>
+                  </div>
+                </EditField>
+                <EditField label="Languages known">
+                  <input type="text" value={editFields.languages_known || ''} onChange={(e) => setEditField('languages_known', e.target.value)} className={fldCls} placeholder="e.g. English, Hindi" />
+                </EditField>
+                <EditField label="Reason for looking" colSpan2>
+                  <textarea value={editFields.reason_for_looking || ''} onChange={(e) => setEditField('reason_for_looking', e.target.value)} rows={2} className={`${fldCls} h-auto py-2 resize-none`} />
+                </EditField>
                 <EditField label="Resume" colSpan2>
                   {candidate.resume_url && (
                     <p className="text-xs text-[#666] mb-1.5">
@@ -682,44 +746,122 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                   </div>
                 </EditField>
               </div>
+
+              {/* Additional Info */}
+              <div className="mt-6 pt-5 border-t border-[#F0F0F4]">
+                <p className="text-xs font-semibold text-[#999] uppercase tracking-wider mb-4">Additional Info</p>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+                  <EditField label="CTC Fixed (LPA)">
+                    <input type="number" min={0} step={0.5} value={editFields.ctc_breakup_fixed ?? ''} onChange={(e) => setEditField('ctc_breakup_fixed', e.target.value)} className={fldCls} />
+                  </EditField>
+                  <EditField label="CTC Variable (LPA)">
+                    <input type="number" min={0} step={0.5} value={editFields.ctc_breakup_variable ?? ''} onChange={(e) => setEditField('ctc_breakup_variable', e.target.value)} className={fldCls} />
+                  </EditField>
+                  <EditField label="Offers in hand (#)">
+                    <input type="number" min={0} step={1} value={editFields.offers_count ?? ''} onChange={(e) => setEditField('offers_count', e.target.value)} className={fldCls} />
+                  </EditField>
+                  <EditField label="Offers details">
+                    <input type="text" value={editFields.offers_details || ''} onChange={(e) => setEditField('offers_details', e.target.value)} className={fldCls} placeholder="Company X – 18L" />
+                  </EditField>
+                  <EditField label="Last working day">
+                    <input type="date" value={editFields.lwd || ''} onChange={(e) => setEditField('lwd', e.target.value)} className={fldCls} />
+                  </EditField>
+                  <EditField label="Date of birth">
+                    <input type="date" value={editFields.dob || ''} onChange={(e) => setEditField('dob', e.target.value)} className={fldCls} />
+                  </EditField>
+                  <EditField label="Notable IDs" colSpan2>
+                    <textarea value={editFields.notable_ids || ''} onChange={(e) => setEditField('notable_ids', e.target.value)} rows={2} className={`${fldCls} h-auto py-2 resize-none`} placeholder="PAN, Passport, Aadhar, etc." />
+                  </EditField>
+                </div>
+              </div>
             </div>
           ) : (
             /* ── Read-only detail grid ────────────────────────────────── */
-            <dl className="grid grid-cols-2 gap-x-8 gap-y-5">
-              <Field label="Client">{candidate?.clients?.name}</Field>
-              <Field label="Recruiter">{candidate?.profiles?.name}</Field>
-              <Field label="Email">{candidate?.email}</Field>
-              <Field label="Phone">{candidate?.phone}</Field>
-              <Field label="Alt contact">{candidate?.alt_contact}</Field>
-              <Field label="Current location">{candidate?.current_location}</Field>
-              <Field label="Preferred location">{candidate?.preferred_location}</Field>
-              <Field label="Education">{candidate?.education}</Field>
-              <Field label="Year of passing">{candidate?.year_of_passing}</Field>
-              <Field label="Current company">{candidate?.current_company}</Field>
-              <Field label="Total exp">
-                {candidate?.total_exp != null ? `${candidate.total_exp} yrs` : null}
-              </Field>
-              <Field label="Relevant exp">
-                {candidate?.relevant_exp != null ? `${candidate.relevant_exp} yrs` : null}
-              </Field>
-              <Field label="Emp mode">{candidate?.emp_mode}</Field>
-              {candidate?.payroll_company ? (
-                <Field label="Payroll company">{candidate.payroll_company}</Field>
-              ) : (
-                <div />
+            <>
+              <dl className="grid grid-cols-2 gap-x-8 gap-y-5">
+                <Field label="Client">{candidate?.clients?.name}</Field>
+                <Field label="Recruiter">{candidate?.profiles?.name}</Field>
+                <Field label="Email">{candidate?.email}</Field>
+                <Field label="Phone">{candidate?.phone}</Field>
+                <Field label="Alt contact">{candidate?.alt_contact}</Field>
+                <Field label="Current location">{candidate?.current_location}</Field>
+                <Field label="Preferred location">{candidate?.preferred_location}</Field>
+                <Field label="Education">{candidate?.education}</Field>
+                <Field label="Year of passing">{candidate?.year_of_passing}</Field>
+                <Field label="Current company">{candidate?.current_company}</Field>
+                <Field label="Total exp">
+                  {candidate?.total_exp != null ? `${candidate.total_exp} yrs` : null}
+                </Field>
+                <Field label="Relevant exp">
+                  {candidate?.relevant_exp != null ? `${candidate.relevant_exp} yrs` : null}
+                </Field>
+                <Field label="Emp mode">{candidate?.emp_mode}</Field>
+                {candidate?.payroll_company ? (
+                  <Field label="Payroll company">{candidate.payroll_company}</Field>
+                ) : (
+                  <div />
+                )}
+                <Field label="Notice period">{candidate?.notice_period}</Field>
+                <Field label="Current CTC">
+                  {candidate?.current_ctc != null ? `${candidate.current_ctc} LPA` : null}
+                </Field>
+                <Field label="Expected CTC">
+                  {candidate?.expected_ctc != null ? `${candidate.expected_ctc} LPA` : null}
+                </Field>
+                <Field label="Source">{candidate?.source}</Field>
+                <Field label="Languages known">{candidate?.languages_known}</Field>
+                <Field label="Willing to relocate">
+                  {candidate?.willing_to_relocate != null ? (candidate.willing_to_relocate ? 'Yes' : 'No') : null}
+                </Field>
+                <Field label="Last updated">{formatDate(candidate?.status_changed_at)}</Field>
+                {candidate?.linkedin_url && (
+                  <Field label="LinkedIn" colSpan2>
+                    <a href={candidate.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-[#5E6AD2] hover:underline truncate block text-sm">
+                      {candidate.linkedin_url}
+                    </a>
+                  </Field>
+                )}
+                {candidate?.reason_for_looking && (
+                  <Field label="Reason for looking" colSpan2>{candidate.reason_for_looking}</Field>
+                )}
+                {candidate?.comments && (
+                  <Field label="Comments" colSpan2>{candidate.comments}</Field>
+                )}
+              </dl>
+
+              {(candidate?.ctc_breakup || candidate?.offers_in_hand || candidate?.lwd || candidate?.dob || candidate?.notable_ids) && (
+                <div className="mt-4 pt-4 border-t border-[#F0F0F4]">
+                  <p className="text-xs font-semibold text-[#999] uppercase tracking-wider mb-3">Additional Info</p>
+                  <dl className="grid grid-cols-2 gap-x-8 gap-y-4">
+                    {candidate.ctc_breakup && (
+                      <Field label="CTC Breakup" colSpan2>
+                        {(() => {
+                          const p = safeParseJson(candidate.ctc_breakup)
+                          return p ? `${p.fixed ?? '—'} Fixed + ${p.variable ?? '—'} Variable (LPA)` : candidate.ctc_breakup
+                        })()}
+                      </Field>
+                    )}
+                    {candidate.offers_in_hand && (
+                      <Field label="Offers in hand" colSpan2>
+                        {(() => {
+                          const p = safeParseJson(candidate.offers_in_hand)
+                          if (!p) return candidate.offers_in_hand
+                          return [
+                            p.count != null ? `${p.count} offer${p.count !== 1 ? 's' : ''}` : null,
+                            p.details,
+                          ].filter(Boolean).join(' — ') || '—'
+                        })()}
+                      </Field>
+                    )}
+                    {candidate.lwd && <Field label="Last working day">{formatDateShort(candidate.lwd)}</Field>}
+                    {candidate.dob && <Field label="Date of birth">{formatDateShort(candidate.dob)}</Field>}
+                    {candidate.notable_ids && (
+                      <Field label="Notable IDs" colSpan2>{candidate.notable_ids}</Field>
+                    )}
+                  </dl>
+                </div>
               )}
-              <Field label="Notice period">{candidate?.notice_period}</Field>
-              <Field label="Current CTC">
-                {candidate?.current_ctc != null ? `${candidate.current_ctc} LPA` : null}
-              </Field>
-              <Field label="Expected CTC">
-                {candidate?.expected_ctc != null ? `${candidate.expected_ctc} LPA` : null}
-              </Field>
-              <Field label="Last updated">{formatDate(candidate?.status_changed_at)}</Field>
-              {candidate?.comments && (
-                <Field label="Comments" colSpan2>{candidate.comments}</Field>
-              )}
-            </dl>
+            </>
           )}
 
           {/* Resume link — shown whenever a valid resume URL can be resolved */}
