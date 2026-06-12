@@ -605,6 +605,80 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
             </div>
           )}
 
+          {/* Mandate Activity */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider">
+                Mandate Activity
+              </h3>
+              <button
+                onClick={() => setShowLinkModal(true)}
+                className="h-7 px-3 rounded-lg text-xs font-semibold border border-[#5E6AD2] text-[#5E6AD2] hover:bg-[#5E6AD2]/5 transition"
+              >
+                Link to Mandate
+              </button>
+            </div>
+
+            {mandatesLoading ? (
+              <p className="text-sm text-[#999]">Loading…</p>
+            ) : linkedMandates.length === 0 ? (
+              <p className="text-sm text-[#999]">Not linked to any mandates</p>
+            ) : (
+              <ul className="space-y-3">
+                {linkedMandates.map((mc) => {
+                  const days = daysInStageMC(mc)
+                  const interviewLine = mc.interview_date
+                    ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime(mc.interview_time) : null].filter(Boolean).join(' · ')
+                    : null
+                  return (
+                    <li key={mc.id} className="rounded-lg border border-[#F0F0F4] px-3 py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-[#0F0F12] truncate">
+                            {mc.mandates?.title ?? '—'}
+                            {mc.mandates?.job_id && (
+                              <span className="font-mono text-xs text-[#999] ml-1.5">{mc.mandates.job_id}</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-[#999] mt-0.5">{mc.mandates?.clients?.name}</p>
+                        </div>
+                        {mc.applicant_id && (
+                          <span className="font-mono text-xs text-[#999] shrink-0">{mc.applicant_id}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                        {mc.stage  && <StageBadge value={mc.stage} />}
+                        {mc.status && <StatusBadge value={mc.status} />}
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${daysBadgeColor(days)}`}>
+                          {days}d
+                        </span>
+                      </div>
+                      {(interviewLine || mc.offered_ctc != null || mc.billing_value_approx != null || mc.billing_value_final != null || mc.date_of_joining) && (
+                        <div className="mt-2 space-y-0.5">
+                          {interviewLine && (
+                            <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Interview</span>{interviewLine}</p>
+                          )}
+                          {mc.offered_ctc != null && (
+                            <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Offered CTC</span>{formatMoney(mc.offered_ctc)}</p>
+                          )}
+                          {mc.billing_value_approx != null && (
+                            <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Billing</span>{formatMoney(mc.billing_value_approx)}</p>
+                          )}
+                          {mc.billing_value_final != null && (
+                            <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Final Billing</span>{formatMoney(mc.billing_value_final)}</p>
+                          )}
+                          {mc.date_of_joining && (
+                            <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">DOJ</span>{formatDateShort(mc.date_of_joining)}</p>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
           <hr className="border-[#F0F0F4]" />
 
           {isEditing ? (
@@ -910,96 +984,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
             )}
           </div>
 
-          <hr className="border-[#F0F0F4]" />
-
-          {/* Mandate Activity */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider">
-                Mandate Activity
-              </h3>
-              <button
-                onClick={() => setShowLinkModal(true)}
-                className="h-7 px-3 rounded-lg text-xs font-semibold border border-[#5E6AD2] text-[#5E6AD2] hover:bg-[#5E6AD2]/5 transition"
-              >
-                Link to Mandate
-              </button>
-            </div>
-
-            {mandatesLoading ? (
-              <p className="text-sm text-[#999]">Loading…</p>
-            ) : linkedMandates.length === 0 ? (
-              <p className="text-sm text-[#999]">Not linked to any mandates</p>
-            ) : (
-              <ul className="space-y-3">
-                {linkedMandates.map((mc) => {
-                  const days = daysInStageMC(mc)
-                  const interviewLine = mc.interview_date
-                    ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime(mc.interview_time) : null].filter(Boolean).join(' · ')
-                    : null
-                  return (
-                    <li key={mc.id} className="rounded-lg border border-[#F0F0F4] px-3 py-3">
-                      {/* Mandate title + client */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-[#0F0F12] truncate">
-                            {mc.mandates?.title ?? '—'}
-                            {mc.mandates?.job_id && (
-                              <span className="font-mono text-xs text-[#999] ml-1.5">{mc.mandates.job_id}</span>
-                            )}
-                          </p>
-                          <p className="text-xs text-[#999] mt-0.5">{mc.mandates?.clients?.name}</p>
-                        </div>
-                        {mc.applicant_id && (
-                          <span className="font-mono text-xs text-[#999] shrink-0">{mc.applicant_id}</span>
-                        )}
-                      </div>
-
-                      {/* Stage + Status + Days in stage */}
-                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        {mc.stage  && <StageBadge value={mc.stage} />}
-                        {mc.status && <StatusBadge value={mc.status} />}
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${daysBadgeColor(days)}`}>
-                          {days}d
-                        </span>
-                      </div>
-
-                      {/* Contextual details — shown only if populated */}
-                      {(interviewLine || mc.offered_ctc != null || mc.billing_value_approx != null || mc.billing_value_final != null || mc.date_of_joining) && (
-                        <div className="mt-2 space-y-0.5">
-                          {interviewLine && (
-                            <p className="text-xs text-[#555]">
-                              <span className="text-[#999] mr-1">Interview</span>{interviewLine}
-                            </p>
-                          )}
-                          {mc.offered_ctc != null && (
-                            <p className="text-xs text-[#555]">
-                              <span className="text-[#999] mr-1">Offered CTC</span>{formatMoney(mc.offered_ctc)}
-                            </p>
-                          )}
-                          {mc.billing_value_approx != null && (
-                            <p className="text-xs text-[#555]">
-                              <span className="text-[#999] mr-1">Billing</span>{formatMoney(mc.billing_value_approx)}
-                            </p>
-                          )}
-                          {mc.billing_value_final != null && (
-                            <p className="text-xs text-[#555]">
-                              <span className="text-[#999] mr-1">Final Billing</span>{formatMoney(mc.billing_value_final)}
-                            </p>
-                          )}
-                          {mc.date_of_joining && (
-                            <p className="text-xs text-[#555]">
-                              <span className="text-[#999] mr-1">DOJ</span>{formatDateShort(mc.date_of_joining)}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </div>
         </div>
       </div>
 
