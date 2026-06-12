@@ -923,7 +923,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                     })()}
                   </Field>
                   <Field label="Last working day">{candidate?.lwd ? formatDateShort(candidate.lwd) : null}</Field>
-                  <Field label="Date of birth">{candidate?.dob ? formatDateShort(candidate.dob) : null}</Field>
+                  <Field label="Date of birth">{candidate?.dob ? formatDate(candidate.dob) : null}</Field>
                   <Field label="Notable IDs" colSpan2>{candidate?.notable_ids}</Field>
                 </dl>
               </div>

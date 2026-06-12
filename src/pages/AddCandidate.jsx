@@ -29,7 +29,7 @@ const INITIAL = {
   current_ctc: '', ctc_breakup_fixed: '', ctc_breakup_variable: '',
   expected_ctc: '',
   // Availability
-  notice_period: '', lwd: '',
+  notice_period: '', lwd: '', dob: '',
   offers_count: '', offers_details: '',
   // Additional
   linkedin_url: '', languages_known: '', reason_for_looking: '',
@@ -220,6 +220,7 @@ export default function AddCandidate() {
       // Availability
       notice_period: form.notice_period,
       lwd:           form.lwd || null,
+      dob:           form.dob || null,
       offers_in_hand: (form.offers_count || form.offers_details)
         ? JSON.stringify({
             count:   form.offers_count !== '' ? parseInt(form.offers_count, 10) : null,
@@ -394,6 +395,9 @@ export default function AddCandidate() {
 
           {/* ── Additional ── */}
           <FormSection title="Additional">
+            <FormField label="Date of birth" error={errors.dob}>
+              <input type="date" value={form.dob} onChange={(e) => setField('dob', e.target.value)} className={inputCls(errors.dob)} />
+            </FormField>
             <FormField label="LinkedIn URL" error={errors.linkedin_url}>
               <input type="url" value={form.linkedin_url} onChange={(e) => setField('linkedin_url', e.target.value)} placeholder="https://linkedin.com/in/…" className={inputCls(errors.linkedin_url)} />
             </FormField>
