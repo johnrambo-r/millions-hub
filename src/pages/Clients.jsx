@@ -86,8 +86,7 @@ function ClientsTable({ rows, loading, onSelect }) {
   }
 
   return (
-    <div className="overflow-auto">
-      <table className="w-full min-w-[860px] border-collapse">
+    <table className="w-full min-w-[860px] border-collapse">
         <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
           <tr className="border-b border-[#F0F0F4]">
             <TH>Name</TH>
@@ -128,8 +127,7 @@ function ClientsTable({ rows, loading, onSelect }) {
             </tr>
           ))}
         </tbody>
-      </table>
-    </div>
+    </table>
   )
 }
 

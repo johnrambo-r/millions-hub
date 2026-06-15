@@ -106,8 +106,7 @@ function MandatesTable({ rows, loading, onSelect, hasFilters }) {
   }
 
   return (
-    <div className="overflow-auto">
-      <table className="w-full min-w-[860px] border-collapse">
+    <table className="w-full min-w-[860px] border-collapse">
         <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
           <tr className="border-b border-[#F0F0F4]">
             <TH className="w-36">Job ID</TH>
@@ -152,8 +151,7 @@ function MandatesTable({ rows, loading, onSelect, hasFilters }) {
             </tr>
           ))}
         </tbody>
-      </table>
-    </div>
+    </table>
   )
 }
 

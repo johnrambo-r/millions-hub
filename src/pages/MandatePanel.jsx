@@ -701,7 +701,7 @@ function CandidateList({ displayed, loading, onRefresh, onRowClick, isRecruiter,
   }
 
   return (
-    <div className="overflow-auto">
+    <>
       {/* Sticky header */}
       <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10`}>
         <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Candidate</span>
@@ -728,7 +728,7 @@ function CandidateList({ displayed, loading, onRefresh, onRowClick, isRecruiter,
           />
         )
       })}
-    </div>
+    </>
   )
 }
 
