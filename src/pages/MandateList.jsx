@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import { useMandatesData } from '../hooks/useMandatesData'
+import Pagination from '../components/Pagination'
 
 // ─── badges ────────────────────────────────────────────────────────────────
 
@@ -108,7 +109,7 @@ function MandatesTable({ rows, loading, onSelect, hasFilters }) {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[860px] border-collapse">
         <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
             <TH className="w-36">Job ID</TH>
             <TH>Title</TH>
             <TH>Client</TH>
@@ -166,6 +167,8 @@ export default function MandateList() {
   const [statusFilter, setStatusFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('')
 
+  const [page, setPage] = useState(1)
+
   const hasFilters = !!(search || statusFilter || priorityFilter)
 
   const filtered = useMemo(() => {
@@ -177,6 +180,13 @@ export default function MandateList() {
       return true
     })
   }, [rows, search, statusFilter, priorityFilter])
+
+  useEffect(() => { setPage(1) }, [search, statusFilter, priorityFilter])
+
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * 50, page * 50),
+    [filtered, page]
+  )
 
   return (
     <AppShell title="Mandates">
@@ -251,12 +261,15 @@ export default function MandateList() {
         {/* Table */}
         <div className="flex-1 overflow-auto">
           <MandatesTable
-            rows={filtered}
+            rows={paginated}
             loading={loading}
             onSelect={(id) => navigate(`/mandates/${id}`)}
             hasFilters={hasFilters}
           />
         </div>
+        {!loading && filtered.length > 0 && (
+          <Pagination total={filtered.length} page={page} onChange={setPage} />
+        )}
       </div>
     </AppShell>
   )

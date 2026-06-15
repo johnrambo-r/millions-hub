@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
+import Pagination from '../components/Pagination'
 import AppShell from '../components/layout/AppShell'
 import { StageBadge, StatusBadge } from '../components/pipeline/StageBadge'
 import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineStageStatus'
@@ -328,7 +329,7 @@ function NewMCTable({ rows, loading, onSelect, onRefresh }) {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1100px] border-collapse">
         <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
             <TH>Candidate</TH>
             <TH>Contact</TH>
             <TH>Client · Mandate</TH>
@@ -499,7 +500,7 @@ function MCTable({ rows, loading, onSelect, activeTab, onRefresh, onReassign }) 
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1020px] border-collapse">
         <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
             <TH className="w-32">App ID</TH>
             <TH>Name</TH>
             <TH>Role</TH>
@@ -539,7 +540,7 @@ function UnassignedTable({ rows, loading, onSelect, onAssign }) {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[820px] border-collapse">
         <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
             <TH className="w-36">Candidate ID</TH>
             <TH>Name</TH>
             <TH>Role</TH>
@@ -724,7 +725,7 @@ function AllCandidatesTable({ rows, loading, onSelect, onRefresh }) {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[960px] border-collapse">
         <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
             <TH className="w-36">Candidate ID</TH>
             <TH>Name</TH>
             <TH>Role</TH>
@@ -761,6 +762,7 @@ export default function Pipeline() {
 
   const [activeTab, setActiveTab]   = useState('pipeline')
   const [amViewMode, setAmViewMode] = useState('my_submissions')
+  const [page, setPage]             = useState(1)
   const [rows, setRows]             = useState([])
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState(null)
@@ -983,6 +985,8 @@ export default function Pipeline() {
     })
   }, [rows, search, stageFilter, statusFilter, clientFilter, recruiterFilter, isMCTab, isNewLayoutTab, activeTab])
 
+  useEffect(() => { setPage(1) }, [activeTab, search, stageFilter, statusFilter, clientFilter, recruiterFilter])
+
   function handleTabChange(tab) {
     setActiveTab(tab)
     setSearch('')
@@ -990,6 +994,7 @@ export default function Pipeline() {
     setStatusFilter('')
     setClientFilter('')
     setRecruiterFilter('')
+    setPage(1)
   }
 
   function handleSelect(candidate) {
@@ -1001,6 +1006,11 @@ export default function Pipeline() {
   }
 
   const hasActiveFilters = search || stageFilter || statusFilter || clientFilter || recruiterFilter
+
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * 50, page * 50),
+    [filtered, page]
+  )
 
   return (
     <AppShell title="Candidates">
@@ -1130,14 +1140,14 @@ export default function Pipeline() {
         <div className="flex-1 overflow-auto">
           {isNewLayoutTab ? (
             <NewMCTable
-              rows={filtered}
+              rows={paginated}
               loading={loading}
               onSelect={handleSelect}
               onRefresh={() => setRefreshToken((t) => t + 1)}
             />
           ) : isMCTab ? (
             <MCTable
-              rows={filtered}
+              rows={paginated}
               loading={loading}
               onSelect={handleSelect}
               activeTab={activeTab}
@@ -1146,20 +1156,23 @@ export default function Pipeline() {
             />
           ) : activeTab === 'unassigned' ? (
             <UnassignedTable
-              rows={filtered}
+              rows={paginated}
               loading={loading}
               onSelect={handleSelect}
               onAssign={setAssignTarget}
             />
           ) : (
             <AllCandidatesTable
-              rows={filtered}
+              rows={paginated}
               loading={loading}
               onSelect={handleSelect}
               onRefresh={() => setRefreshToken((t) => t + 1)}
             />
           )}
         </div>
+        {!loading && filtered.length > 0 && (
+          <Pagination total={filtered.length} page={page} onChange={setPage} />
+        )}
       </div>
 
       <CandidatePanel

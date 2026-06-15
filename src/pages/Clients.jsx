@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import AddClientForm from '../components/AddClientForm'
 import { useClientsData } from '../hooks/useClientsData'
+import Pagination from '../components/Pagination'
 import useRole from '../hooks/useRole'
 
 // ─── badges ────────────────────────────────────────────────────────────────
@@ -88,7 +89,7 @@ function ClientsTable({ rows, loading, onSelect }) {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[860px] border-collapse">
         <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
             <TH>Name</TH>
             <TH>Industry</TH>
             <TH className="w-40">Client Type</TH>
@@ -146,6 +147,7 @@ export default function Clients() {
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [page, setPage] = useState(1)
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return rows.filter((r) => {
@@ -155,6 +157,13 @@ export default function Clients() {
       return true
     })
   }, [rows, search, statusFilter, typeFilter])
+
+  useEffect(() => { setPage(1) }, [search, statusFilter, typeFilter])
+
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * 50, page * 50),
+    [filtered, page]
+  )
 
   if (roleLoading) return null
   if (isRecruiter) return <Navigate to="/dashboard" replace />
@@ -233,11 +242,14 @@ export default function Clients() {
         {/* Table */}
         <div className="flex-1 overflow-auto">
           <ClientsTable
-            rows={filtered}
+            rows={paginated}
             loading={loading}
             onSelect={(row) => navigate('/clients/' + row.id)}
           />
         </div>
+        {!loading && filtered.length > 0 && (
+          <Pagination total={filtered.length} page={page} onChange={setPage} />
+        )}
       </div>
 
       {/* Add client modal */}

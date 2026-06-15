@@ -12,6 +12,7 @@ import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineS
 import { StageBadge, StatusBadge as CandidateStatusBadge } from '../components/pipeline/StageBadge'
 import { logActivity } from '../lib/activityLog'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
+import Pagination from '../components/Pagination'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -39,17 +40,20 @@ const EDITABLE_FIELDS = [
   'internal_notes', 'jd_text', 'am_id',
 ]
 
-const STAGE_ORDER           = Object.fromEntries(STAGES.map((s, i) => [s, i]))
-const PIPELINE_STAGES       = new Set(['L2', 'L3', 'Client Onsite', 'HR'])
-const INTERVIEW_OR_BEYOND   = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining'])
-const INTERVIEW_STAGES      = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
-const ACTIVE_STATUS_SET     = new Set(ACTIVE_STATUSES)
-const PLACED_STATUS_SET     = new Set(PLACED_STATUSES)
+const STAGE_ORDER         = Object.fromEntries(STAGES.map((s, i) => [s, i]))
+const PIPELINE_STAGES     = new Set(['L2', 'L3', 'Client Onsite', 'HR'])
+const INTERVIEW_OR_BEYOND = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining'])
+const INTERVIEW_STAGES    = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
+const ACTIVE_STATUS_SET   = new Set(ACTIVE_STATUSES)
+const PLACED_STATUS_SET   = new Set(PLACED_STATUSES)
+const ALL_MC_STATUSES     = [...new Set(Object.values(STAGE_STATUS_MAP).flat())].sort()
 
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
 const ROW_GRID = 'grid gap-x-3 px-5 py-3'
-const ROW_COLS = 'grid-cols-[minmax(140px,2fr)_auto_auto_minmax(80px,1fr)_auto_80px_32px]'
+const ROW_COLS = 'grid-cols-[minmax(140px,2fr)_auto_auto_minmax(80px,1fr)_auto_80px_80px]'
+
+const selCls = 'h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -585,10 +589,22 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
         className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors group items-start cursor-pointer`}
         onClick={() => onRowClick(mc.candidate_id)}
       >
-        <div className="min-w-0 py-0.5">
-          <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
+        {/* Col 1: Candidate name + applicant ID + hover unlink button */}
+        <div className="relative min-w-0 py-0.5">
+          <p className="text-sm font-medium text-[#0F0F12] truncate pr-5">{mc.candidate?.name ?? '—'}</p>
           <p className="text-xs text-[#999] mt-0.5 font-mono">{mc.applicant_id ?? '—'}</p>
+          <button
+            onClick={(e) => { e.stopPropagation(); setUnlinkConfirm(true) }}
+            title="Unlink candidate"
+            className="absolute right-0 top-0 w-5 h-5 flex items-center justify-center rounded text-[#CCC] hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
+              <path d="M5 5l6 6M11 5L5 11" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
+
+        {/* Col 2: Stage */}
         <div className="py-0.5">
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
@@ -597,6 +613,8 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
             disabled={!canEdit}
           />
         </div>
+
+        {/* Col 3: Status */}
         <div className="py-0.5">
           <InlineDropdown
             badge={<CandidateStatusBadge value={status || null} />}
@@ -605,6 +623,8 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
             disabled={!canEdit || !stage}
           />
         </div>
+
+        {/* Col 4: Contextual details */}
         <div className="min-w-0 space-y-0.5 py-0.5">
           {interviewStr && (
             <p className="text-xs text-[#555] truncate">
@@ -628,23 +648,21 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
           )}
           {!hasDetails && <span className="text-xs text-[#DDD]">—</span>}
         </div>
+
+        {/* Col 5: Days in stage */}
         <div className="flex items-start gap-1 py-0.5">
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${colorCls}`}>
             {days}d
           </span>
           {saving && <span className="text-[10px] text-[#999] mt-0.5">…</span>}
         </div>
+
+        {/* Col 6: Last updated */}
         <div className="text-xs text-[#999] whitespace-nowrap py-0.5">{formatRelDate(lastUpdated)}</div>
-        <div className="flex justify-end py-0.5">
-          <button
-            onClick={(e) => { e.stopPropagation(); setUnlinkConfirm(true) }}
-            title="Unlink candidate"
-            className="w-7 h-7 flex items-center justify-center rounded text-[#CCC] hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
-          >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
-              <path d="M5 5l6 6M11 5L5 11" strokeLinecap="round" />
-            </svg>
-          </button>
+
+        {/* Col 7: Last delivered (status_changed_at only) */}
+        <div className="text-xs text-[#999] whitespace-nowrap py-0.5">
+          {mc.status_changed_at ? formatRelDate(mc.status_changed_at) : '—'}
         </div>
       </div>
 
@@ -662,89 +680,39 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
 
 // ─── Candidate list ────────────────────────────────────────────────────────────
 
-function CandidateList({ mandateCandidates, loading, onRefresh, onRowClick, currentUserId, isRecruiter }) {
-  const [sortBy, setSortBy]           = useState('last_updated')
-  const [filterStage, setFilterStage] = useState('')
-
-  const displayed = useMemo(() => {
-    let list = isRecruiter
-      ? mandateCandidates.filter((mc) => mc.linked_by === currentUserId)
-      : [...mandateCandidates]
-
-    if (filterStage) list = list.filter((mc) => mc.stage === filterStage)
-
-    if (sortBy === 'stage') {
-      list.sort((a, b) => (STAGE_ORDER[a.stage] ?? 99) - (STAGE_ORDER[b.stage] ?? 99))
-    } else if (sortBy === 'last_updated') {
-      list.sort((a, b) => {
-        const ta = new Date(a.status_changed_at ?? a.linked_at ?? 0).getTime()
-        const tb = new Date(b.status_changed_at ?? b.linked_at ?? 0).getTime()
-        return tb - ta
-      })
-    } else if (sortBy === 'days_in_stage') {
-      list.sort((a, b) => daysInStage(b) - daysInStage(a))
-    }
-    return list
-  }, [mandateCandidates, sortBy, filterStage, isRecruiter, currentUserId])
+function CandidateList({ displayed, loading, onRefresh, onRowClick, isRecruiter, currentUserId }) {
+  if (loading) {
+    return <p className="px-6 py-10 text-sm text-[#999]">Loading candidates…</p>
+  }
+  if (displayed.length === 0) {
+    return <p className="px-6 py-10 text-sm text-[#999]">No candidates match the current filters.</p>
+  }
 
   return (
     <div>
-      {/* Controls bar */}
-      <div className="px-5 py-3 border-b border-[#F0F0F4] flex items-center gap-3 flex-wrap">
-        <select
-          value={filterStage}
-          onChange={(e) => setFilterStage(e.target.value)}
-          className="h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition"
-        >
-          <option value="">All stages</option>
-          {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          className="h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition"
-        >
-          <option value="last_updated">Sort: Last updated</option>
-          <option value="stage">Sort: Stage</option>
-          <option value="days_in_stage">Sort: Days in stage ↓</option>
-        </select>
-        <span className="text-xs text-[#999]">
-          {displayed.length}{filterStage ? ` of ${mandateCandidates.length}` : ''} candidate{displayed.length !== 1 ? 's' : ''}
-        </span>
+      {/* Sticky header */}
+      <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10`}>
+        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Candidate</span>
+        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Stage</span>
+        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Status</span>
+        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Details</span>
+        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5 whitespace-nowrap">In Stage</span>
+        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Updated</span>
+        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5 whitespace-nowrap">Delivered</span>
       </div>
 
-      {loading ? (
-        <p className="px-6 py-10 text-sm text-[#999]">Loading candidates…</p>
-      ) : displayed.length === 0 ? (
-        <p className="px-6 py-10 text-sm text-[#999]">
-          {filterStage ? 'No candidates at this stage.' : 'No candidates linked yet.'}
-        </p>
-      ) : (
-        <>
-          {/* Header row */}
-          <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] bg-[#FAFAFA]`}>
-            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Candidate</span>
-            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Stage</span>
-            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Status</span>
-            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Details</span>
-            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5 whitespace-nowrap">In Stage</span>
-            <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Updated</span>
-            <span />
-          </div>
-          {displayed.map((mc) => {
-            const canEdit = !isRecruiter || mc.linked_by === currentUserId
-            return (
-              <CandidateTableRow
-                key={mc.id}
-                mc={mc}
-                onRefresh={onRefresh}
-                onRowClick={onRowClick}
-                canEdit={canEdit}
-              />
-            )
-          })}
-        </>
-      )}
+      {displayed.map((mc) => {
+        const canEdit = !isRecruiter || mc.linked_by === currentUserId
+        return (
+          <CandidateTableRow
+            key={mc.id}
+            mc={mc}
+            onRefresh={onRefresh}
+            onRowClick={onRowClick}
+            canEdit={canEdit}
+          />
+        )
+      })}
     </div>
   )
 }
@@ -768,8 +736,16 @@ export default function MandatePanel() {
   const [mandateRecruiters, setMandateRecruiters] = useState([])
   const [selectedRecruiters, setSelectedRecruiters] = useState([])
 
-  const [activeTab, setActiveTab]       = useState('details')
+  const [activeTab, setActiveTab]         = useState('details')
   const [showLinkModal, setShowLinkModal] = useState(false)
+
+  // Candidates tab filter/pagination state
+  const [candidateSearch, setCandidateSearch]   = useState('')
+  const [stageFilter, setStageFilter]           = useState('')
+  const [statusFilter, setStatusFilter]         = useState('')
+  const [recruiterFilter, setRecruiterFilter]   = useState('')
+  const [candidateSortBy, setCandidateSortBy]   = useState('last_updated')
+  const [candidatePage, setCandidatePage]       = useState(1)
 
   const [isEditing, setIsEditing]     = useState(false)
   const [editFields, setEditFields]   = useState({})
@@ -789,6 +765,11 @@ export default function MandatePanel() {
     () => new Set(mandateCandidates.map((mc) => mc.candidate_id)),
     [mandateCandidates]
   )
+
+  // Reset candidatePage when any candidate filter/sort changes
+  useEffect(() => {
+    setCandidatePage(1)
+  }, [candidateSearch, stageFilter, statusFilter, recruiterFilter, candidateSortBy])
 
   // Fetch mandate
   useEffect(() => {
@@ -857,6 +838,40 @@ export default function MandatePanel() {
       .filter((mc) => mc.linked_by && !seen.has(mc.linked_by) && seen.add(mc.linked_by))
       .map((mc) => mc.linked_by_profile ?? { id: mc.linked_by, name: 'Unknown' })
   }, [mandateCandidates])
+
+  // Filtered + sorted candidates
+  const filteredCandidates = useMemo(() => {
+    let list = isRecruiter
+      ? mandateCandidates.filter((mc) => mc.linked_by === currentUserId)
+      : [...mandateCandidates]
+
+    const q = candidateSearch.toLowerCase()
+    if (q) list = list.filter((mc) =>
+      mc.candidate?.name?.toLowerCase().includes(q) ||
+      mc.candidate?.email?.toLowerCase().includes(q)
+    )
+    if (stageFilter)     list = list.filter((mc) => mc.stage === stageFilter)
+    if (statusFilter)    list = list.filter((mc) => mc.status === statusFilter)
+    if (recruiterFilter) list = list.filter((mc) => mc.linked_by === recruiterFilter)
+
+    if (candidateSortBy === 'stage') {
+      list.sort((a, b) => (STAGE_ORDER[a.stage] ?? 99) - (STAGE_ORDER[b.stage] ?? 99))
+    } else if (candidateSortBy === 'last_updated') {
+      list.sort((a, b) => {
+        const ta = new Date(a.status_changed_at ?? a.linked_at ?? 0).getTime()
+        const tb = new Date(b.status_changed_at ?? b.linked_at ?? 0).getTime()
+        return tb - ta
+      })
+    } else if (candidateSortBy === 'days_in_stage') {
+      list.sort((a, b) => daysInStage(b) - daysInStage(a))
+    }
+    return list
+  }, [mandateCandidates, candidateSearch, stageFilter, statusFilter, recruiterFilter, candidateSortBy, isRecruiter, currentUserId])
+
+  const paginatedCandidates = useMemo(
+    () => filteredCandidates.slice((candidatePage - 1) * 50, candidatePage * 50),
+    [filteredCandidates, candidatePage]
+  )
 
   // Fetch full candidate on row click → open CandidatePanel
   async function handleRowClick(candidateId) {
@@ -1007,6 +1022,9 @@ export default function MandatePanel() {
     )
   }
 
+  const candidateStatusOptions = stageFilter ? (STAGE_STATUS_MAP[stageFilter] ?? []) : ALL_MC_STATUSES
+  const hasCandidateFilters = !!(candidateSearch || stageFilter || statusFilter || recruiterFilter)
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -1130,14 +1148,87 @@ export default function MandatePanel() {
 
       {/* Candidates tab */}
       {activeTab === 'candidates' && (
-        <CandidateList
-          mandateCandidates={mandateCandidates}
-          loading={candidatesLoading}
-          onRefresh={fetchCandidates}
-          onRowClick={handleRowClick}
-          currentUserId={currentUserId}
-          isRecruiter={isRecruiter}
-        />
+        <>
+          {/* Filter bar */}
+          <div className="px-5 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
+            {/* Search */}
+            <div className="relative">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="6.5" cy="6.5" r="4.5" /><path d="M10.5 10.5l3 3" strokeLinecap="round" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search name or email…"
+                value={candidateSearch}
+                onChange={(e) => setCandidateSearch(e.target.value)}
+                className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-48"
+              />
+            </div>
+
+            {/* Stage */}
+            <select
+              value={stageFilter}
+              onChange={(e) => { setStageFilter(e.target.value); setStatusFilter('') }}
+              className={selCls}
+            >
+              <option value="">All stages</option>
+              {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+
+            {/* Status */}
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={selCls}>
+              <option value="">All statuses</option>
+              {candidateStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+
+            {/* Recruiter — non-recruiters only */}
+            {!isRecruiter && workingRecruiters.length > 0 && (
+              <select value={recruiterFilter} onChange={(e) => setRecruiterFilter(e.target.value)} className={selCls}>
+                <option value="">All recruiters</option>
+                {workingRecruiters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            )}
+
+            {/* Sort */}
+            <select value={candidateSortBy} onChange={(e) => setCandidateSortBy(e.target.value)} className={selCls}>
+              <option value="last_updated">Sort: Last updated</option>
+              <option value="stage">Sort: Stage</option>
+              <option value="days_in_stage">Sort: Days in stage ↓</option>
+            </select>
+
+            {/* Clear */}
+            {hasCandidateFilters && (
+              <button
+                onClick={() => { setCandidateSearch(''); setStageFilter(''); setStatusFilter(''); setRecruiterFilter('') }}
+                className="text-xs text-[#5E6AD2] hover:underline ml-1"
+              >
+                Clear filters
+              </button>
+            )}
+
+            {/* Count */}
+            <span className="text-xs text-[#999] ml-auto">
+              {filteredCandidates.length} candidate{filteredCandidates.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <CandidateList
+            displayed={paginatedCandidates}
+            loading={candidatesLoading}
+            onRefresh={fetchCandidates}
+            onRowClick={handleRowClick}
+            isRecruiter={isRecruiter}
+            currentUserId={currentUserId}
+          />
+
+          {!candidatesLoading && filteredCandidates.length > 0 && (
+            <Pagination
+              total={filteredCandidates.length}
+              page={candidatePage}
+              onChange={setCandidatePage}
+            />
+          )}
+        </>
       )}
 
       {/* Modals */}
