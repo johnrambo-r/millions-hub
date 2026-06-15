@@ -40,9 +40,7 @@ const EDITABLE_FIELDS = [
 ]
 
 const STAGE_ORDER           = Object.fromEntries(STAGES.map((s, i) => [s, i]))
-// L2–HR only; Offer and Joining are separate counters
 const PIPELINE_STAGES       = new Set(['L2', 'L3', 'Client Onsite', 'HR'])
-// All stages at or past the interview threshold
 const INTERVIEW_OR_BEYOND   = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining'])
 const INTERVIEW_STAGES      = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
 const ACTIVE_STATUS_SET     = new Set(ACTIVE_STATUSES)
@@ -50,7 +48,6 @@ const PLACED_STATUS_SET     = new Set(PLACED_STATUSES)
 
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
-// Row grid — shared between header and data rows
 const ROW_GRID = 'grid gap-x-3 px-5 py-3'
 const ROW_COLS = 'grid-cols-[minmax(140px,2fr)_auto_auto_minmax(80px,1fr)_auto_80px_32px]'
 
@@ -265,20 +262,16 @@ function LinkCandidateModal({ mandateId, linkedIds, onLink, onClose }) {
   )
 }
 
-// ─── Section 1: Snapshot strip ────────────────────────────────────────────────
+// ─── Snapshot strip ────────────────────────────────────────────────────────────
 
 function SnapshotStrip({ mandateCandidates: mcs, mandate }) {
   const snap = useMemo(() => {
     let interviews = 0, offersOut = 0, placed = 0, inPipeline = 0
     for (const mc of mcs) {
       const { stage, status } = mc
-      // Reached or passed the interview threshold
       if (INTERVIEW_OR_BEYOND.has(stage)) interviews++
-      // Actively in offer stage with a live offer status
       if (stage === 'Offer' && (status === 'Offer Released' || status === 'Offer Accepted')) offersOut++
-      // Placed statuses
       if (PLACED_STATUS_SET.has(status)) placed++
-      // Actively in L2–HR with an active status
       if (PIPELINE_STAGES.has(stage) && ACTIVE_STATUS_SET.has(status)) inPipeline++
     }
     const daysOpen = mandate?.created_at
@@ -318,7 +311,7 @@ function SnapshotStrip({ mandateCandidates: mcs, mandate }) {
   )
 }
 
-// ─── Section 2: Read details ──────────────────────────────────────────────────
+// ─── Read details ──────────────────────────────────────────────────────────────
 
 function ReadDetails({ mandate, workingRecruiters }) {
   const expDisplay =
@@ -377,7 +370,7 @@ function ReadDetails({ mandate, workingRecruiters }) {
   )
 }
 
-// ─── Section 2: Edit view ─────────────────────────────────────────────────────
+// ─── Edit view ─────────────────────────────────────────────────────────────────
 
 function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, selectedRecruiters, toggleRecruiter }) {
   return (
@@ -496,54 +489,7 @@ function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, sel
   )
 }
 
-// ─── Section 2: Details container ────────────────────────────────────────────
-
-function MandateDetailsSection({
-  mandate, workingRecruiters, isEditing,
-  editFields, setEditField, amProfiles, recruiterProfiles,
-  selectedRecruiters, toggleRecruiter, open, onToggle,
-}) {
-  return (
-    <div className="border-b border-[#F0F0F4]">
-      <button
-        onClick={onToggle}
-        className="w-full px-6 py-3.5 flex items-center justify-between text-left hover:bg-[#FAFAFA] transition-colors"
-      >
-        <div className="flex items-center gap-2 flex-wrap min-w-0">
-          <span className="text-sm font-semibold text-[#0F0F12] shrink-0">Mandate Details</span>
-          <MandateStatusBadge value={mandate.status} />
-          <PriorityBadge value={mandate.priority} />
-          {mandate.client && <span className="text-xs text-[#666] truncate">· {mandate.client.name}</span>}
-          {mandate.location && <span className="text-xs text-[#999] truncate">· {mandate.location}</span>}
-        </div>
-        <svg
-          viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
-          className={`w-4 h-4 text-[#999] transition-transform shrink-0 ml-3 ${open ? 'rotate-180' : ''}`}
-        >
-          <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {open && (
-        <div className="px-6 pb-6 pt-1">
-          {isEditing ? (
-            <EditView
-              editFields={editFields}
-              setEditField={setEditField}
-              amProfiles={amProfiles}
-              recruiterProfiles={recruiterProfiles}
-              selectedRecruiters={selectedRecruiters}
-              toggleRecruiter={toggleRecruiter}
-            />
-          ) : (
-            <ReadDetails mandate={mandate} workingRecruiters={workingRecruiters} />
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Section 3: Candidate table row ──────────────────────────────────────────
+// ─── Candidate table row ──────────────────────────────────────────────────────
 
 function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
   const { session }         = useAuth()
@@ -560,7 +506,6 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
   const colorCls      = daysColor(days)
   const lastUpdated   = mc.status_changed_at ?? mc.linked_at
 
-  // Contextual detail fields
   const hasInterview = mc.interview_date && INTERVIEW_STAGES.has(stage)
   const interviewStr = hasInterview
     ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime(mc.interview_time) : null].filter(Boolean).join(' · ')
@@ -640,13 +585,10 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
         className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors group items-start cursor-pointer`}
         onClick={() => onRowClick(mc.candidate_id)}
       >
-        {/* Col 1: Candidate name + applicant ID */}
         <div className="min-w-0 py-0.5">
           <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
           <p className="text-xs text-[#999] mt-0.5 font-mono">{mc.applicant_id ?? '—'}</p>
         </div>
-
-        {/* Col 2: Stage — stopPropagation is inside InlineDropdown's button */}
         <div className="py-0.5">
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
@@ -655,8 +597,6 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
             disabled={!canEdit}
           />
         </div>
-
-        {/* Col 3: Status */}
         <div className="py-0.5">
           <InlineDropdown
             badge={<CandidateStatusBadge value={status || null} />}
@@ -665,8 +605,6 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
             disabled={!canEdit || !stage}
           />
         </div>
-
-        {/* Col 4: Contextual details */}
         <div className="min-w-0 space-y-0.5 py-0.5">
           {interviewStr && (
             <p className="text-xs text-[#555] truncate">
@@ -690,19 +628,13 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
           )}
           {!hasDetails && <span className="text-xs text-[#DDD]">—</span>}
         </div>
-
-        {/* Col 5: Days in stage */}
         <div className="flex items-start gap-1 py-0.5">
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${colorCls}`}>
             {days}d
           </span>
           {saving && <span className="text-[10px] text-[#999] mt-0.5">…</span>}
         </div>
-
-        {/* Col 6: Last updated */}
         <div className="text-xs text-[#999] whitespace-nowrap py-0.5">{formatRelDate(lastUpdated)}</div>
-
-        {/* Col 7: Unlink (hover-only, stopPropagation so row click doesn't fire) */}
         <div className="flex justify-end py-0.5">
           <button
             onClick={(e) => { e.stopPropagation(); setUnlinkConfirm(true) }}
@@ -728,20 +660,13 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
   )
 }
 
-// ─── Section 3: Candidate list ────────────────────────────────────────────────
+// ─── Candidate list ────────────────────────────────────────────────────────────
 
-function CandidateList({ mandateId, mandateCandidates, loading, onRefresh, onRowClick, currentUserId, isRecruiter }) {
+function CandidateList({ mandateCandidates, loading, onRefresh, onRowClick, currentUserId, isRecruiter }) {
   const [sortBy, setSortBy]           = useState('last_updated')
   const [filterStage, setFilterStage] = useState('')
-  const [showModal, setShowModal]     = useState(false)
-
-  const linkedIds = useMemo(
-    () => new Set(mandateCandidates.map((mc) => mc.candidate_id)),
-    [mandateCandidates]
-  )
 
   const displayed = useMemo(() => {
-    // Recruiters see only their own linked candidates
     let list = isRecruiter
       ? mandateCandidates.filter((mc) => mc.linked_by === currentUserId)
       : [...mandateCandidates]
@@ -765,41 +690,27 @@ function CandidateList({ mandateId, mandateCandidates, loading, onRefresh, onRow
   return (
     <div>
       {/* Controls bar */}
-      <div className="px-5 py-3 border-b border-[#F0F0F4] flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={filterStage}
-            onChange={(e) => setFilterStage(e.target.value)}
-            className="h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition"
-          >
-            <option value="">All stages</option>
-            {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition"
-          >
-            <option value="last_updated">Sort: Last updated</option>
-            <option value="stage">Sort: Stage</option>
-            <option value="days_in_stage">Sort: Days in stage ↓</option>
-          </select>
-          <span className="text-xs text-[#999]">
-            {displayed.length}{filterStage ? ` of ${mandateCandidates.length}` : ''} candidate{displayed.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-        {!isRecruiter && (
-          <button
-            onClick={() => setShowModal(true)}
-            className="h-8 px-3 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 flex items-center gap-1.5 shrink-0"
-            style={{ backgroundColor: '#5E6AD2' }}
-          >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <path d="M8 3v10M3 8h10" strokeLinecap="round" />
-            </svg>
-            Link Candidate
-          </button>
-        )}
+      <div className="px-5 py-3 border-b border-[#F0F0F4] flex items-center gap-3 flex-wrap">
+        <select
+          value={filterStage}
+          onChange={(e) => setFilterStage(e.target.value)}
+          className="h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition"
+        >
+          <option value="">All stages</option>
+          {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          className="h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition"
+        >
+          <option value="last_updated">Sort: Last updated</option>
+          <option value="stage">Sort: Stage</option>
+          <option value="days_in_stage">Sort: Days in stage ↓</option>
+        </select>
+        <span className="text-xs text-[#999]">
+          {displayed.length}{filterStage ? ` of ${mandateCandidates.length}` : ''} candidate{displayed.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {loading ? (
@@ -821,7 +732,6 @@ function CandidateList({ mandateId, mandateCandidates, loading, onRefresh, onRow
             <span />
           </div>
           {displayed.map((mc) => {
-            // Recruiters can only edit rows they personally linked
             const canEdit = !isRecruiter || mc.linked_by === currentUserId
             return (
               <CandidateTableRow
@@ -834,15 +744,6 @@ function CandidateList({ mandateId, mandateCandidates, loading, onRefresh, onRow
             )
           })}
         </>
-      )}
-
-      {showModal && (
-        <LinkCandidateModal
-          mandateId={mandateId}
-          linkedIds={linkedIds}
-          onLink={() => { setShowModal(false); onRefresh() }}
-          onClose={() => setShowModal(false)}
-        />
       )}
     </div>
   )
@@ -867,6 +768,9 @@ export default function MandatePanel() {
   const [mandateRecruiters, setMandateRecruiters] = useState([])
   const [selectedRecruiters, setSelectedRecruiters] = useState([])
 
+  const [activeTab, setActiveTab]       = useState('details')
+  const [showLinkModal, setShowLinkModal] = useState(false)
+
   const [isEditing, setIsEditing]     = useState(false)
   const [editFields, setEditFields]   = useState({})
   const [isDirty, setIsDirty]         = useState(false)
@@ -875,22 +779,16 @@ export default function MandatePanel() {
   const [editSuccess, setEditSuccess] = useState(false)
   const [dialog, setDialog]           = useState(null)
   const [dialogSaving, setDialogSaving] = useState(false)
-  const [detailsOpen, setDetailsOpen] = useState(true)
 
-  // Candidate Panel state
   const [panelCandidate, setPanelCandidate] = useState(null)
 
   const originalFieldsRef     = useRef({})
   const originalRecruitersRef = useRef([])
-  const detailsDefaultSet     = useRef(false)
 
-  // Set details section default based on role (once, after role loads)
-  useEffect(() => {
-    if (!roleLoading && !detailsDefaultSet.current) {
-      detailsDefaultSet.current = true
-      setDetailsOpen(!isRecruiter)
-    }
-  }, [roleLoading, isRecruiter])
+  const linkedIds = useMemo(
+    () => new Set(mandateCandidates.map((mc) => mc.candidate_id)),
+    [mandateCandidates]
+  )
 
   // Fetch mandate
   useEffect(() => {
@@ -936,7 +834,7 @@ export default function MandatePanel() {
   }
   useEffect(() => { fetchMandateRecruiters() }, [id]) // eslint-disable-line
 
-  // Fetch candidates (with linked_by profile for "recruiters working it")
+  // Fetch candidates
   function fetchCandidates() {
     if (!id) return
     setCandidatesLoading(true)
@@ -998,7 +896,7 @@ export default function MandatePanel() {
     setEditSuccess(false)
     setIsDirty(false)
     setIsEditing(true)
-    setDetailsOpen(true)
+    setActiveTab('details')
   }
 
   function toggleRecruiter(rid) {
@@ -1088,6 +986,7 @@ export default function MandatePanel() {
   }
 
   // ── Loading / error ──────────────────────────────────────────────────────────
+
   if (loading) {
     return (
       <AppShell title="Mandate">
@@ -1109,6 +1008,7 @@ export default function MandatePanel() {
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
     <AppShell title={mandate.title}>
       {/* Sticky page header */}
@@ -1124,10 +1024,26 @@ export default function MandatePanel() {
             Back
           </button>
           <span className="text-[#E0E0E8] select-none">|</span>
-          <h1 className="text-base font-semibold text-[#0F0F12] truncate">{mandate.title}</h1>
+          <div className="flex items-center gap-2 min-w-0">
+            <h1 className="text-base font-semibold text-[#0F0F12] truncate">{mandate.title}</h1>
+            <MandateStatusBadge value={mandate.status} />
+            <PriorityBadge value={mandate.priority} />
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {editSuccess && <span className="text-xs text-green-600 font-medium">Saved</span>}
+          {!isRecruiter && (
+            <button
+              onClick={() => setShowLinkModal(true)}
+              className="h-8 px-3 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 flex items-center gap-1.5"
+              style={{ backgroundColor: '#5E6AD2' }}
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                <path d="M8 3v10M3 8h10" strokeLinecap="round" />
+              </svg>
+              Link Candidate
+            </button>
+          )}
           {!isEditing ? (
             !isRecruiter && (
               <button
@@ -1164,39 +1080,76 @@ export default function MandatePanel() {
         </div>
       )}
 
-      {/* Section 1: Snapshot strip */}
+      {/* Snapshot strip */}
       <SnapshotStrip mandateCandidates={mandateCandidates} mandate={mandate} />
 
-      {/* Section 2: Mandate details (collapsible) */}
-      <MandateDetailsSection
-        mandate={mandate}
-        workingRecruiters={workingRecruiters}
-        isEditing={isEditing}
-        editFields={editFields}
-        setEditField={setEditField}
-        amProfiles={amProfiles}
-        recruiterProfiles={recruiterProfiles}
-        selectedRecruiters={selectedRecruiters}
-        toggleRecruiter={toggleRecruiter}
-        open={detailsOpen}
-        onToggle={() => setDetailsOpen((o) => !o)}
-      />
-
-      {/* Section 3: Candidate list */}
-      <div className="px-5 pt-4 pb-2">
-        <h2 className="text-xs font-semibold text-[#666] uppercase tracking-wider">Candidates</h2>
+      {/* Tab bar */}
+      <div className="flex border-b border-[#F0F0F4] px-6">
+        <button
+          onClick={() => setActiveTab('details')}
+          className={`py-2.5 mr-5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'details'
+              ? 'border-[#5E6AD2] text-[#5E6AD2]'
+              : 'border-transparent text-[#999] hover:text-[#666]'
+          }`}
+        >
+          Details
+        </button>
+        <button
+          onClick={() => !isEditing && setActiveTab('candidates')}
+          disabled={isEditing}
+          className={`py-2.5 mr-5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'candidates'
+              ? 'border-[#5E6AD2] text-[#5E6AD2]'
+              : isEditing
+              ? 'border-transparent text-[#CCC] cursor-not-allowed'
+              : 'border-transparent text-[#999] hover:text-[#666]'
+          }`}
+        >
+          Candidates
+        </button>
       </div>
-      <CandidateList
-        mandateId={id}
-        mandateCandidates={mandateCandidates}
-        loading={candidatesLoading}
-        onRefresh={fetchCandidates}
-        onRowClick={handleRowClick}
-        currentUserId={currentUserId}
-        isRecruiter={isRecruiter}
-      />
 
-      {/* Candidate Panel (slide-in) */}
+      {/* Details tab */}
+      {activeTab === 'details' && (
+        <div className="px-6 pt-5 pb-8">
+          {isEditing ? (
+            <EditView
+              editFields={editFields}
+              setEditField={setEditField}
+              amProfiles={amProfiles}
+              recruiterProfiles={recruiterProfiles}
+              selectedRecruiters={selectedRecruiters}
+              toggleRecruiter={toggleRecruiter}
+            />
+          ) : (
+            <ReadDetails mandate={mandate} workingRecruiters={workingRecruiters} />
+          )}
+        </div>
+      )}
+
+      {/* Candidates tab */}
+      {activeTab === 'candidates' && (
+        <CandidateList
+          mandateCandidates={mandateCandidates}
+          loading={candidatesLoading}
+          onRefresh={fetchCandidates}
+          onRowClick={handleRowClick}
+          currentUserId={currentUserId}
+          isRecruiter={isRecruiter}
+        />
+      )}
+
+      {/* Modals */}
+      {showLinkModal && (
+        <LinkCandidateModal
+          mandateId={id}
+          linkedIds={linkedIds}
+          onLink={() => { setShowLinkModal(false); fetchCandidates() }}
+          onClose={() => setShowLinkModal(false)}
+        />
+      )}
+
       <CandidatePanel
         candidate={panelCandidate}
         onClose={() => setPanelCandidate(null)}
