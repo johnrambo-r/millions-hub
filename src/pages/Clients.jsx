@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
-import ClientPanel from '../components/ClientPanel'
 import AddClientForm from '../components/AddClientForm'
 import { useClientsData } from '../hooks/useClientsData'
 import useRole from '../hooks/useRole'
@@ -139,13 +138,13 @@ const ACCOUNT_STATUSES = ['Active', 'On Hold', 'Inactive']
 const CLIENT_TYPES = ['GCC', 'Product Startup', 'IT Services', 'Consulting']
 
 export default function Clients() {
+  const navigate = useNavigate()
   const { isRecruiter, loading: roleLoading } = useRole()
   const [refreshToken, setRefreshToken] = useState(0)
   const { rows, loading, error } = useClientsData(refreshToken)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
-  const [selectedClient, setSelectedClient] = useState(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -163,7 +162,7 @@ export default function Clients() {
   function handleAdded(newClient) {
     setShowAddForm(false)
     setRefreshToken((t) => t + 1)
-    setSelectedClient(newClient)
+    navigate('/clients/' + newClient.id)
   }
 
   return (
@@ -236,20 +235,10 @@ export default function Clients() {
           <ClientsTable
             rows={filtered}
             loading={loading}
-            onSelect={setSelectedClient}
+            onSelect={(row) => navigate('/clients/' + row.id)}
           />
         </div>
       </div>
-
-      {/* Detail panel */}
-      <ClientPanel
-        client={selectedClient}
-        onClose={() => setSelectedClient(null)}
-        onUpdate={(updated) => {
-          setSelectedClient((prev) => prev ? { ...prev, ...updated } : prev)
-          setRefreshToken((t) => t + 1)
-        }}
-      />
 
       {/* Add client modal */}
       {showAddForm && (
