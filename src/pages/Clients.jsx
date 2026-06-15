@@ -86,10 +86,10 @@ function ClientsTable({ rows, loading, onSelect }) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-auto">
       <table className="w-full min-w-[860px] border-collapse">
-        <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
+        <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4]">
             <TH>Name</TH>
             <TH>Industry</TH>
             <TH className="w-40">Client Type</TH>

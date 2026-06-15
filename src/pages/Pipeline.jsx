@@ -326,10 +326,10 @@ function NewMCTable({ rows, loading, onSelect, onRefresh }) {
   if (rows.length === 0) return <EmptyState />
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-auto">
       <table className="w-full min-w-[1100px] border-collapse">
-        <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
+        <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
             <TH>Candidate</TH>
             <TH>Contact</TH>
             <TH>Client · Mandate</TH>
@@ -497,10 +497,10 @@ function MCTable({ rows, loading, onSelect, activeTab, onRefresh, onReassign }) 
   const isTalentPool = activeTab === 'talent_pool'
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-auto">
       <table className="w-full min-w-[1020px] border-collapse">
-        <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
+        <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
             <TH className="w-32">App ID</TH>
             <TH>Name</TH>
             <TH>Role</TH>
@@ -537,10 +537,10 @@ function UnassignedTable({ rows, loading, onSelect, onAssign }) {
   if (rows.length === 0) return <EmptyState message="No unassigned candidates" />
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-auto">
       <table className="w-full min-w-[820px] border-collapse">
-        <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
+        <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
             <TH className="w-36">Candidate ID</TH>
             <TH>Name</TH>
             <TH>Role</TH>
@@ -722,10 +722,10 @@ function AllCandidatesTable({ rows, loading, onSelect, onRefresh }) {
   if (rows.length === 0) return <EmptyState message="No candidates found" />
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-auto">
       <table className="w-full min-w-[960px] border-collapse">
-        <thead>
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10">
+        <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
             <TH className="w-36">Candidate ID</TH>
             <TH>Name</TH>
             <TH>Role</TH>

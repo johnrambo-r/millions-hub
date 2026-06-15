@@ -51,7 +51,7 @@ const ALL_MC_STATUSES     = [...new Set(Object.values(STAGE_STATUS_MAP).flat())]
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
 const ROW_GRID = 'grid gap-x-3 px-5 py-3'
-const ROW_COLS = 'grid-cols-[minmax(140px,2fr)_auto_auto_minmax(80px,1fr)_auto_80px_80px]'
+const ROW_COLS = 'grid-cols-[minmax(160px,2fr)_minmax(140px,1.5fr)_auto_auto_minmax(100px,1.5fr)_minmax(100px,1fr)_60px_100px_32px]'
 
 const selCls = 'h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
@@ -495,7 +495,7 @@ function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, sel
 
 // ─── Candidate table row ──────────────────────────────────────────────────────
 
-function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
+function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate }) {
   const { session }         = useAuth()
   const [stage, setStage]   = useState(mc.stage ?? '')
   const [status, setStatus] = useState(mc.status ?? '')
@@ -508,7 +508,6 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
   const changedBy     = session?.user?.id
   const days          = daysInStage(mc)
   const colorCls      = daysColor(days)
-  const lastUpdated   = mc.status_changed_at ?? mc.linked_at
 
   const hasInterview = mc.interview_date && INTERVIEW_STAGES.has(stage)
   const interviewStr = hasInterview
@@ -560,7 +559,7 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
   if (unlinkConfirm) {
     return (
       <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] items-center`}>
-        <div className="col-span-7 flex items-center gap-3">
+        <div className="col-span-9 flex items-center gap-3">
           <p className="text-sm text-[#0F0F12] flex-1 min-w-0 truncate">
             Unlink <span className="font-medium">{mc.candidate?.name ?? 'this candidate'}</span>?
           </p>
@@ -589,22 +588,19 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
         className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors group items-start cursor-pointer`}
         onClick={() => onRowClick(mc.candidate_id)}
       >
-        {/* Col 1: Candidate name + applicant ID + hover unlink button */}
-        <div className="relative min-w-0 py-0.5">
-          <p className="text-sm font-medium text-[#0F0F12] truncate pr-5">{mc.candidate?.name ?? '—'}</p>
+        {/* Col 1: Candidate name + applicant ID */}
+        <div className="min-w-0 py-0.5">
+          <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
           <p className="text-xs text-[#999] mt-0.5 font-mono">{mc.applicant_id ?? '—'}</p>
-          <button
-            onClick={(e) => { e.stopPropagation(); setUnlinkConfirm(true) }}
-            title="Unlink candidate"
-            className="absolute right-0 top-0 w-5 h-5 flex items-center justify-center rounded text-[#CCC] hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
-          >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
-              <path d="M5 5l6 6M11 5L5 11" strokeLinecap="round" />
-            </svg>
-          </button>
         </div>
 
-        {/* Col 2: Stage */}
+        {/* Col 2: Contact */}
+        <div className="min-w-0 py-0.5">
+          <p className="text-xs text-[#666] truncate">{mc.candidate?.email ?? '—'}</p>
+          {mc.candidate?.phone && <p className="text-xs text-[#666] mt-0.5 truncate">{mc.candidate.phone}</p>}
+        </div>
+
+        {/* Col 3: Stage */}
         <div className="py-0.5">
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
@@ -614,7 +610,7 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
           />
         </div>
 
-        {/* Col 3: Status */}
+        {/* Col 4: Status */}
         <div className="py-0.5">
           <InlineDropdown
             badge={<CandidateStatusBadge value={status || null} />}
@@ -624,7 +620,7 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
           />
         </div>
 
-        {/* Col 4: Contextual details */}
+        {/* Col 5: Contextual details */}
         <div className="min-w-0 space-y-0.5 py-0.5">
           {interviewStr && (
             <p className="text-xs text-[#555] truncate">
@@ -649,7 +645,13 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
           {!hasDetails && <span className="text-xs text-[#DDD]">—</span>}
         </div>
 
-        {/* Col 5: Days in stage */}
+        {/* Col 6: Recruiter · AM */}
+        <div className="min-w-0 py-0.5">
+          <p className="text-xs text-[#666] truncate">{mc.linked_by_profile?.name ?? '—'}</p>
+          <p className="text-xs text-[#999] mt-0.5 truncate">{mandate?.am?.name ?? '—'}</p>
+        </div>
+
+        {/* Col 7: Days in stage */}
         <div className="flex items-start gap-1 py-0.5">
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${colorCls}`}>
             {days}d
@@ -657,12 +659,22 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
           {saving && <span className="text-[10px] text-[#999] mt-0.5">…</span>}
         </div>
 
-        {/* Col 6: Last updated */}
-        <div className="text-xs text-[#999] whitespace-nowrap py-0.5">{formatRelDate(lastUpdated)}</div>
-
-        {/* Col 7: Last delivered (status_changed_at only) */}
-        <div className="text-xs text-[#999] whitespace-nowrap py-0.5">
+        {/* Col 8: Last Delivered */}
+        <div className="text-xs text-[#666] whitespace-nowrap py-0.5">
           {mc.status_changed_at ? formatRelDate(mc.status_changed_at) : '—'}
+        </div>
+
+        {/* Col 9: Unlink */}
+        <div className="flex items-start py-0.5">
+          <button
+            onClick={(e) => { e.stopPropagation(); setUnlinkConfirm(true) }}
+            title="Unlink candidate"
+            className="w-5 h-5 flex items-center justify-center rounded text-[#CCC] hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
+              <path d="M5 5l6 6M11 5L5 11" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -680,7 +692,7 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit }) {
 
 // ─── Candidate list ────────────────────────────────────────────────────────────
 
-function CandidateList({ displayed, loading, onRefresh, onRowClick, isRecruiter, currentUserId }) {
+function CandidateList({ displayed, loading, onRefresh, onRowClick, isRecruiter, currentUserId, mandate }) {
   if (loading) {
     return <p className="px-6 py-10 text-sm text-[#999]">Loading candidates…</p>
   }
@@ -689,16 +701,18 @@ function CandidateList({ displayed, loading, onRefresh, onRowClick, isRecruiter,
   }
 
   return (
-    <div>
+    <div className="overflow-auto">
       {/* Sticky header */}
       <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10`}>
         <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Candidate</span>
+        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Contact</span>
         <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Stage</span>
         <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Status</span>
         <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Details</span>
+        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5 whitespace-nowrap">Recruiter · AM</span>
         <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5 whitespace-nowrap">In Stage</span>
-        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Updated</span>
-        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5 whitespace-nowrap">Delivered</span>
+        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Delivered</span>
+        <span></span>
       </div>
 
       {displayed.map((mc) => {
@@ -710,6 +724,7 @@ function CandidateList({ displayed, loading, onRefresh, onRowClick, isRecruiter,
             onRefresh={onRefresh}
             onRowClick={onRowClick}
             canEdit={canEdit}
+            mandate={mandate}
           />
         )
       })}
@@ -1219,6 +1234,7 @@ export default function MandatePanel() {
             onRowClick={handleRowClick}
             isRecruiter={isRecruiter}
             currentUserId={currentUserId}
+            mandate={mandate}
           />
 
           {!candidatesLoading && filteredCandidates.length > 0 && (
