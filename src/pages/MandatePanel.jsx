@@ -50,7 +50,7 @@ const ALL_MC_STATUSES     = [...new Set(Object.values(STAGE_STATUS_MAP).flat())]
 
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
-const ROW_GRID = 'grid gap-x-3 px-5 py-3'
+const ROW_GRID = 'grid gap-x-3 px-4 py-2.5'
 const ROW_COLS = 'grid-cols-[minmax(160px,2fr)_minmax(140px,1.5fr)_auto_auto_minmax(100px,1.5fr)_minmax(100px,1fr)_60px_100px_32px]'
 
 const selCls = 'h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
@@ -507,7 +507,6 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate }) {
   const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
   const changedBy     = session?.user?.id
   const days          = daysInStage(mc)
-  const colorCls      = daysColor(days)
 
   const hasInterview = mc.interview_date && INTERVIEW_STAGES.has(stage)
   const interviewStr = hasInterview
@@ -596,8 +595,8 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate }) {
 
         {/* Col 2: Contact */}
         <div className="min-w-0 py-0.5">
-          <p className="text-xs text-[#666] truncate">{mc.candidate?.email ?? '—'}</p>
-          {mc.candidate?.phone && <p className="text-xs text-[#666] mt-0.5 truncate">{mc.candidate.phone}</p>}
+          {mc.candidate?.phone && <p className="text-xs text-[#666] truncate">{mc.candidate.phone}</p>}
+          <p className="text-xs text-[#666] truncate mt-0.5">{mc.candidate?.email ?? '—'}</p>
         </div>
 
         {/* Col 3: Stage */}
@@ -623,9 +622,7 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate }) {
         {/* Col 5: Contextual details */}
         <div className="min-w-0 space-y-0.5 py-0.5">
           {interviewStr && (
-            <p className="text-xs text-[#555] truncate">
-              <span className="text-[#999] mr-1">Interview</span>{interviewStr}
-            </p>
+            <p className="text-xs text-[#555] truncate">{interviewStr}</p>
           )}
           {ctcStr && (
             <p className="text-xs text-[#555]">
@@ -652,11 +649,9 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate }) {
         </div>
 
         {/* Col 7: Days in stage */}
-        <div className="flex items-start gap-1 py-0.5">
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${colorCls}`}>
-            {days}d
-          </span>
-          {saving && <span className="text-[10px] text-[#999] mt-0.5">…</span>}
+        <div className="py-0.5">
+          <span className="text-sm text-[#666] tabular-nums">{days}d</span>
+          {saving && <span className="text-[10px] text-[#999] ml-1">…</span>}
         </div>
 
         {/* Col 8: Last Delivered */}
@@ -704,14 +699,14 @@ function CandidateList({ displayed, loading, onRefresh, onRowClick, isRecruiter,
     <>
       {/* Sticky header */}
       <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10`}>
-        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Candidate</span>
-        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Contact</span>
-        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Stage</span>
-        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Status</span>
-        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Details</span>
-        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5 whitespace-nowrap">Recruiter · AM</span>
-        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5 whitespace-nowrap">In Stage</span>
-        <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider py-0.5">Delivered</span>
+        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Candidate</span>
+        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Contact</span>
+        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Stage</span>
+        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Status</span>
+        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Details</span>
+        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Recruiter · AM</span>
+        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">In Stage</span>
+        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Delivered</span>
         <span></span>
       </div>
 
