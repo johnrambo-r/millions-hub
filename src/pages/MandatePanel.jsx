@@ -50,9 +50,6 @@ const ALL_MC_STATUSES     = [...new Set(Object.values(STAGE_STATUS_MAP).flat())]
 
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
-const ROW_GRID = 'grid gap-x-3 px-4 py-2.5'
-const ROW_COLS = 'grid-cols-[minmax(160px,2fr)_minmax(140px,1.5fr)_auto_auto_minmax(100px,1.5fr)_minmax(100px,1fr)_60px_100px_32px]'
-
 const selCls = 'h-8 rounded-lg border border-[#F0F0F4] bg-white px-2.5 text-xs text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -557,110 +554,114 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate }) {
 
   if (unlinkConfirm) {
     return (
-      <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] items-center`}>
-        <div className="col-span-9 flex items-center gap-3">
-          <p className="text-sm text-[#0F0F12] flex-1 min-w-0 truncate">
-            Unlink <span className="font-medium">{mc.candidate?.name ?? 'this candidate'}</span>?
-          </p>
-          <button
-            onClick={handleUnlink}
-            disabled={unlinking}
-            className="h-7 px-3 rounded-lg text-xs font-semibold text-white bg-red-600 hover:opacity-90 disabled:opacity-50 transition shrink-0"
-          >
-            {unlinking ? 'Unlinking…' : 'Confirm'}
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); setUnlinkConfirm(false) }}
-            disabled={unlinking}
-            className="h-7 px-3 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition shrink-0"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
+      <tr className="border-b border-[#F0F0F4]">
+        <td colSpan={9} className="px-4 py-3">
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-[#0F0F12] flex-1 min-w-0 truncate">
+              Unlink <span className="font-medium">{mc.candidate?.name ?? 'this candidate'}</span>?
+            </p>
+            <button
+              onClick={handleUnlink}
+              disabled={unlinking}
+              className="h-7 px-3 rounded-lg text-xs font-semibold text-white bg-red-600 hover:opacity-90 disabled:opacity-50 transition shrink-0"
+            >
+              {unlinking ? 'Unlinking…' : 'Confirm'}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setUnlinkConfirm(false) }}
+              disabled={unlinking}
+              className="h-7 px-3 rounded-lg text-xs font-medium border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition shrink-0"
+            >
+              Cancel
+            </button>
+          </div>
+        </td>
+      </tr>
     )
   }
 
   return (
     <>
-      <div
-        className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors group items-start cursor-pointer`}
+      <tr
+        className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors group cursor-pointer"
         onClick={() => onRowClick(mc.candidate_id)}
       >
-        {/* Col 1: Candidate name + applicant ID */}
-        <div className="min-w-0 py-0.5">
-          <p className="text-sm font-medium text-[#0F0F12] truncate">{mc.candidate?.name ?? '—'}</p>
+        {/* Candidate */}
+        <td className="px-4 py-3 text-sm">
+          <p className="font-medium text-[#0F0F12] truncate max-w-[160px]">{mc.candidate?.name ?? '—'}</p>
           <p className="text-xs text-[#999] mt-0.5 font-mono">{mc.applicant_id ?? '—'}</p>
-        </div>
+        </td>
 
-        {/* Col 2: Contact */}
-        <div className="min-w-0 py-0.5">
-          {mc.candidate?.phone && <p className="text-xs text-[#666] truncate">{mc.candidate.phone}</p>}
-          <p className="text-xs text-[#666] truncate mt-0.5">{mc.candidate?.email ?? '—'}</p>
-        </div>
+        {/* Contact */}
+        <td className="px-4 py-3 text-sm">
+          {mc.candidate?.phone && <p className="text-xs text-[#666] truncate max-w-[140px]">{mc.candidate.phone}</p>}
+          <p className="text-xs text-[#666] truncate max-w-[140px] mt-0.5">{mc.candidate?.email ?? '—'}</p>
+        </td>
 
-        {/* Col 3: Stage */}
-        <div className="py-0.5">
+        {/* Stage */}
+        <td className="px-4 py-3 text-sm">
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
             options={STAGES}
             onSelect={handleStageChange}
             disabled={!canEdit}
           />
-        </div>
+        </td>
 
-        {/* Col 4: Status */}
-        <div className="py-0.5">
+        {/* Status */}
+        <td className="px-4 py-3 text-sm">
           <InlineDropdown
             badge={<CandidateStatusBadge value={status || null} />}
             options={statusOptions}
             onSelect={handleStatusChange}
             disabled={!canEdit || !stage}
           />
-        </div>
+        </td>
 
-        {/* Col 5: Contextual details */}
-        <div className="min-w-0 space-y-0.5 py-0.5">
-          {interviewStr && (
-            <p className="text-xs text-[#555] truncate">{interviewStr}</p>
-          )}
-          {ctcStr && (
-            <p className="text-xs text-[#555]">
-              <span className="text-[#999] mr-1">CTC</span>{ctcStr}
-            </p>
-          )}
-          {billingStr && (
-            <p className="text-xs text-[#555]">
-              <span className="text-[#999] mr-1">Billing</span>{billingStr}
-            </p>
-          )}
-          {dojStr && (
-            <p className="text-xs text-[#555]">
-              <span className="text-[#999] mr-1">DOJ</span>{dojStr}
-            </p>
-          )}
-          {!hasDetails && <span className="text-xs text-[#DDD]">—</span>}
-        </div>
+        {/* Details */}
+        <td className="px-4 py-3 text-sm min-w-[120px]">
+          <div className="space-y-0.5">
+            {interviewStr && (
+              <p className="text-xs text-[#555] truncate">{interviewStr}</p>
+            )}
+            {ctcStr && (
+              <p className="text-xs text-[#555]">
+                <span className="text-[#999] mr-1">CTC</span>{ctcStr}
+              </p>
+            )}
+            {billingStr && (
+              <p className="text-xs text-[#555]">
+                <span className="text-[#999] mr-1">Billing</span>{billingStr}
+              </p>
+            )}
+            {dojStr && (
+              <p className="text-xs text-[#555]">
+                <span className="text-[#999] mr-1">DOJ</span>{dojStr}
+              </p>
+            )}
+            {!hasDetails && <span className="text-xs text-[#DDD]">—</span>}
+          </div>
+        </td>
 
-        {/* Col 6: Recruiter · AM */}
-        <div className="min-w-0 py-0.5">
-          <p className="text-xs text-[#666] truncate">{mc.linked_by_profile?.name ?? '—'}</p>
-          <p className="text-xs text-[#999] mt-0.5 truncate">{mandate?.am?.name ?? '—'}</p>
-        </div>
+        {/* Recruiter · AM */}
+        <td className="px-4 py-3 text-sm">
+          <p className="text-xs text-[#666] truncate max-w-[120px]">{mc.linked_by_profile?.name ?? '—'}</p>
+          <p className="text-xs text-[#999] mt-0.5 truncate max-w-[120px]">{mandate?.am?.name ?? '—'}</p>
+        </td>
 
-        {/* Col 7: Days in stage */}
-        <div className="py-0.5">
+        {/* In Stage */}
+        <td className="px-4 py-3 text-sm">
           <span className="text-sm text-[#666] tabular-nums">{days}d</span>
           {saving && <span className="text-[10px] text-[#999] ml-1">…</span>}
-        </div>
+        </td>
 
-        {/* Col 8: Last Delivered */}
-        <div className="text-xs text-[#666] whitespace-nowrap py-0.5">
+        {/* Delivered */}
+        <td className="px-4 py-3 text-sm text-[#666] whitespace-nowrap">
           {mc.status_changed_at ? formatRelDate(mc.status_changed_at) : '—'}
-        </div>
+        </td>
 
-        {/* Col 9: Unlink */}
-        <div className="flex items-start py-0.5">
+        {/* Unlink */}
+        <td className="px-4 py-3 text-sm w-8">
           <button
             onClick={(e) => { e.stopPropagation(); setUnlinkConfirm(true) }}
             title="Unlink candidate"
@@ -670,8 +671,8 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate }) {
               <path d="M5 5l6 6M11 5L5 11" strokeLinecap="round" />
             </svg>
           </button>
-        </div>
-      </div>
+        </td>
+      </tr>
 
       {prompt && (
         <StagePromptModal
@@ -696,34 +697,36 @@ function CandidateList({ displayed, loading, onRefresh, onRowClick, isRecruiter,
   }
 
   return (
-    <>
-      {/* Sticky header */}
-      <div className={`${ROW_GRID} ${ROW_COLS} border-b border-[#F0F0F4] bg-[#FAFAFA] sticky top-0 z-10`}>
-        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Candidate</span>
-        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Contact</span>
-        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Stage</span>
-        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Status</span>
-        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Details</span>
-        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Recruiter · AM</span>
-        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">In Stage</span>
-        <span className="text-xs font-semibold text-[#999] uppercase tracking-wider">Delivered</span>
-        <span></span>
-      </div>
-
-      {displayed.map((mc) => {
-        const canEdit = !isRecruiter || mc.linked_by === currentUserId
-        return (
-          <CandidateTableRow
-            key={mc.id}
-            mc={mc}
-            onRefresh={onRefresh}
-            onRowClick={onRowClick}
-            canEdit={canEdit}
-            mandate={mandate}
-          />
-        )
-      })}
-    </>
+    <table className="w-full border-collapse">
+      <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+        <tr className="border-b border-[#F0F0F4]">
+          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Candidate</th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Contact</th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Stage</th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Status</th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Details</th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Recruiter · AM</th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">In Stage</th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Delivered</th>
+          <th className="px-4 py-2.5 w-8"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {displayed.map((mc) => {
+          const canEdit = !isRecruiter || mc.linked_by === currentUserId
+          return (
+            <CandidateTableRow
+              key={mc.id}
+              mc={mc}
+              onRefresh={onRefresh}
+              onRowClick={onRowClick}
+              canEdit={canEdit}
+              mandate={mandate}
+            />
+          )
+        })}
+      </tbody>
+    </table>
   )
 }
 
