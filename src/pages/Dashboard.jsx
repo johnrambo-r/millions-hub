@@ -4,13 +4,22 @@ import MetricCard from '../components/dashboard/MetricCard'
 import DashboardWidget from '../components/dashboard/DashboardWidget'
 import CandidateRow from '../components/dashboard/CandidateRow'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
+import KpiTab from '../pages/KpiTab'
 import { useProfile } from '../hooks/useProfile'
 import { useDashboardData } from '../hooks/useDashboardData'
+import useRole from '../hooks/useRole'
+
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'kpi', label: 'KPI' },
+]
 
 export default function Dashboard() {
   const profile = useProfile()
   const { data, loading, refresh } = useDashboardData(profile)
   const [selectedCandidate, setSelectedCandidate] = useState(null)
+  const [activeTab, setActiveTab] = useState('overview')
+  const { role } = useRole()
 
   const interviews = data?.interviewsToday ?? []
   const cvOverdue = data?.cvFeedbackOverdue ?? []
@@ -19,6 +28,28 @@ export default function Dashboard() {
 
   return (
     <AppShell title="Dashboard">
+      <div className="flex flex-col h-full">
+
+        {/* Tab bar */}
+        <div className="px-6 border-b border-[#F0F0F4] bg-white flex items-center gap-1 shrink-0">
+          {TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === id
+                  ? 'border-[#5E6AD2] text-[#5E6AD2]'
+                  : 'border-transparent text-[#999] hover:text-[#666]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+      {activeTab === 'kpi' && <KpiTab role={role} userId={profile?.id} />}
+
+      {activeTab === 'overview' && (
       <div className="p-6 space-y-6 max-w-6xl">
 
         {/* Metric cards — 2×2 grid */}
@@ -109,6 +140,9 @@ export default function Dashboard() {
             ))}
           </DashboardWidget>
         </div>
+
+      </div>
+      )}
 
       </div>
 
