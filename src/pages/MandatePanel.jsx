@@ -836,7 +836,7 @@ export default function MandatePanel() {
     setCandidatesLoading(true)
     supabase
       .from('mandate_candidates')
-      .select('*, candidate:candidates!candidate_id(id, name, skill_role, email), linked_by_profile:profiles!linked_by(id, name)')
+      .select('*, candidate:candidates!candidate_id(id, name, skill_role, email, phone), linked_by_profile:profiles!linked_by(id, name)')
       .eq('mandate_id', id)
       .order('linked_at', { ascending: false })
       .then(({ data }) => {
@@ -1163,7 +1163,7 @@ export default function MandatePanel() {
 
       {/* Candidates tab */}
       {activeTab === 'candidates' && (
-        <>
+        <div className="flex-1 overflow-auto flex flex-col min-h-0">
           {/* Filter bar */}
           <div className="px-5 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
             {/* Search */}
@@ -1244,7 +1244,7 @@ export default function MandatePanel() {
               onChange={setCandidatePage}
             />
           )}
-        </>
+        </div>
       )}
 
       {/* Modals */}
