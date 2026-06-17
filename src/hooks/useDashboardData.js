@@ -91,7 +91,7 @@ export function useDashboardData(profile) {
         .filter(
           (r) =>
             CV_STAGES.includes(r.stage) &&
-            r.status === 'FB Pending' &&
+            r.status === 'Processed - FB Pending' &&
             daysSince(r.status_changed_at) >= 3
         )
         .map((r) => ({ ...r, daysOverdue: daysSince(r.status_changed_at) }))

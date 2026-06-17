@@ -1,0 +1,8 @@
+145:    <div className="flex items-center justify-center py-20 text-sm text-[#999]">{message}</div>
+150:  return <div className="flex items-center justify-center py-20 text-sm text-[#999]">Loading…</div>
+163:      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-700">
+169:    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700">
+566:                  <div className="flex items-center gap-1.5">
+1013:          <div className="px-6 pt-3 pb-0 flex items-center gap-2">
+1035:        <div className="px-6 border-b border-[#F0F0F4] bg-white flex items-center gap-1 shrink-0 mt-1">
+1052:        <div className="px-6 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">

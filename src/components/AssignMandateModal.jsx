@@ -29,7 +29,7 @@ export default function AssignMandateModal({ candidateId, candidateName, onClose
   const [step, setStep] = useState(1) // 1=pick mandate, 2=stage+status, 3=confirm
 
   const [stage, setStage] = useState('CV')
-  const [status, setStatus] = useState('FB Pending')
+  const [status, setStatus] = useState('Internal Review')
   const [interviewDate, setInterviewDate] = useState('')
   const [interviewTime, setInterviewTime] = useState('')
   const [offeredCtc, setOfferedCtc] = useState('')

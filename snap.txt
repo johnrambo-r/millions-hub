@@ -1,0 +1,7 @@
+266:// ─── Snapshot strip ────────────────────────────────────────────────────────────
+268:function SnapshotStrip({ mandateCandidates: mcs, mandate }) {
+281:    return { total: mcs.length, cvsSent: mcs.length, inPipeline, interviews, offersOut, placed, daysOpen }
+286:    { label: 'CVs Sent',       value: snap.cvsSent,    accent: 'text-indigo-600' },
+287:    { label: 'In Pipeline',    value: snap.inPipeline, accent: 'text-violet-600' },
+1114:      {/* Snapshot strip */}
+1115:      <SnapshotStrip mandateCandidates={mandateCandidates} mandate={mandate} />

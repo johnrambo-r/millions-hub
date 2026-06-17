@@ -10,8 +10,8 @@ export const STAGES = ['CV', 'L1', 'L2', 'L3', 'Client Onsite', 'HR', 'Offer', '
 
 export const STAGE_STATUS_MAP = {
   'CV': [
-    'Internal Review', 'Processed - FB Pending', 'Shortlisted', 'Hold', 'No Response',
-    'Internal Duplicate', 'Client Duplicate', 'Internal Reject', 'Reject', 'Hold — Closed', 'No Response — Closed',
+    'Shortlisted', 'FB Pending', 'Hold', 'No Response',
+    'Internal Duplicate', 'Internal Reject', 'Reject', 'Hold — Closed', 'No Response — Closed',
   ],
   'L1': [
     'Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold',
@@ -46,14 +46,14 @@ export const STAGE_STATUS_MAP = {
 
 // Tab placement — driven solely by mandate_candidates.status
 export const ACTIVE_STATUSES = [
-  'Internal Review', 'Processed - FB Pending', 'Shortlisted', 'Hold', 'No Response',
+  'Shortlisted', 'FB Pending', 'Hold', 'No Response',
   'Scheduled', 'Schedule Pending', 'No Show',
   'Offer Released', 'Offer Accepted',
   'Yet to Join',
 ]
 
 export const TALENT_POOL_STATUSES = [
-  'Internal Duplicate', 'Client Duplicate', 'Internal Reject', 'Reject',
+  'Internal Duplicate', 'Internal Reject', 'Reject',
   'Hold — Closed', 'No Response — Closed', 'No Show — Closed',
   'Offer Declined', 'Offer Revoked',
   'Declined', 'Joined & Dropped',

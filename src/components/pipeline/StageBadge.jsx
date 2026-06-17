@@ -11,15 +11,17 @@ const STAGE_STYLES = {
 
 // Talent pool / closed statuses render in muted red
 const TALENT_POOL_SET = new Set([
-  'Internal Reject', 'Internal Duplicate', 'Reject',
+  'Internal Reject', 'Internal Duplicate', 'Client Duplicate', 'Reject',
   'Hold — Closed', 'No Response — Closed', 'No Show — Closed',
   'Offer Declined', 'Offer Revoked',
   'Declined', 'Joined & Dropped',
 ])
 
 const STATUS_STYLES = {
-  'Shortlisted':      'bg-green-50 text-green-700',
-  'FB Pending':       'bg-amber-50 text-amber-700',
+  'Internal Review':        'bg-slate-100 text-slate-600',
+  'Processed - FB Pending': 'bg-amber-50 text-amber-700',
+  'Shortlisted':            'bg-green-50 text-green-700',
+  'FB Pending':             'bg-amber-50 text-amber-700',
   'Hold':             'bg-yellow-50 text-yellow-700',
   'No Response':      'bg-gray-50 text-gray-600',
   'Scheduled':        'bg-indigo-50 text-indigo-700',
