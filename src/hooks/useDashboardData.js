@@ -117,13 +117,13 @@ export function useDashboardData(profile) {
     fetchData()
 
     const channel = supabase
-      .channel('dashboard-mc-realtime')
+      .channel(`dashboard-mc-realtime-${session?.user?.id ?? 'anon'}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mandate_candidates' },
         () => fetchRef.current?.({ background: true }))
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [profile, session])
+  }, [profile?.id, profile?.role, session?.user?.id])
 
   return { data, loading, refresh: () => fetchRef.current?.({ background: true }) }
 }
