@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import Pagination from '../components/Pagination'
 import AppShell from '../components/layout/AppShell'
@@ -17,6 +17,7 @@ import {
   ACTIVE_STATUSES,
   TALENT_POOL_STATUSES,
   PLACED_STATUSES,
+  getNextStageOptions,
 } from '../lib/candidateConstants'
 import useRole from '../hooks/useRole'
 
@@ -48,7 +49,7 @@ const CANDIDATE_FIELDS = `
 
 const MC_SELECT = `
   id, candidate_id, stage, status, applicant_id, status_changed_at, linked_by, linked_at,
-  interview_date, interview_time, date_of_joining, mandate_id,
+  interview_date, interview_time, date_of_joining, assessment_date, mandate_id,
   billing_value_approx,
   linked_by_profile:profiles!linked_by(id, name),
   candidates(${CANDIDATE_FIELDS}),
@@ -179,6 +180,19 @@ function NewMCRow({ row, onSelect, onRefresh }) {
   const [stage, setStage]   = useState(row.stage ?? '')
   const [status, setStatus] = useState(row.status ?? '')
   const [prompt, setPrompt] = useState(null)
+  const [rescheduling, setRescheduling] = useState(false)
+  const [rescheduleDate, setRescheduleDate] = useState(row.interview_date ?? '')
+  const [rescheduleTime, setRescheduleTime] = useState(row.interview_time ?? '')
+  const rescheduleRef = useRef(null)
+
+  useEffect(() => {
+    if (!rescheduling) return
+    function handler(e) {
+      if (rescheduleRef.current && !rescheduleRef.current.contains(e.target)) setRescheduling(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [rescheduling])
 
   const c         = row.candidates ?? {}
   const changedBy = session?.user?.id
@@ -201,7 +215,9 @@ function NewMCRow({ row, onSelect, onRefresh }) {
       await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
     }
 
-    if (INTERVIEW_STAGES.has(newStage)) {
+    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
+      setPrompt({ type: 'assessment' })
+    } else if (INTERVIEW_STAGES.has(newStage)) {
       setPrompt({ type: 'interview' })
     } else if (newStage === 'Offer') {
       setPrompt({ type: 'offer' })
@@ -234,7 +250,54 @@ function NewMCRow({ row, onSelect, onRefresh }) {
       const d = new Date(row.interview_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
       interviewDojContent = (
         <div>
-          <span className="text-sm text-[#0F0F12]">{d}</span>
+          <div className="flex items-center">
+            <span className="text-sm text-[#0F0F12]">{d}</span>
+            <span className="relative shrink-0" ref={rescheduleRef}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setRescheduling(true) }}
+                className="ml-1 text-[#999] hover:text-[#5E6AD2] transition-colors"
+                title="Reschedule"
+              >
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3 inline">
+                  <path d="M11.5 2.5l2 2L5 13l-3 1 1-3 8.5-8.5z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {rescheduling && (
+                <div className="absolute top-full left-0 bg-white border border-[#E0E0E8] rounded-lg shadow-lg p-3 z-50 min-w-[200px]">
+                  <label className="block mb-2">
+                    <span className="text-xs text-[#999] mb-1 block">Date</span>
+                    <input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} className="h-8 w-full rounded-lg border border-[#F0F0F4] px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition" />
+                  </label>
+                  <label className="block mb-3">
+                    <span className="text-xs text-[#999] mb-1 block">Time</span>
+                    <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} className="h-8 w-full rounded-lg border border-[#F0F0F4] px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition" />
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        const oldVal = [row.interview_date, row.interview_time].filter(Boolean).join(' ')
+                        const newVal = [rescheduleDate, rescheduleTime].filter(Boolean).join(' ')
+                        await supabase.from('mandate_candidates').update({ interview_date: rescheduleDate || null, interview_time: rescheduleTime || null }).eq('id', row.id)
+                        await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'interview_reschedule', oldValue: oldVal, newValue: newVal })
+                        setRescheduling(false)
+                        onRefresh()
+                      }}
+                      className="h-7 px-3 rounded-lg text-xs font-semibold text-white bg-[#5E6AD2] hover:opacity-90 transition"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setRescheduling(false) }}
+                      className="h-7 px-3 rounded-lg text-xs text-[#666] border border-[#F0F0F4] hover:bg-[#F5F5F8] transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </span>
+          </div>
           {row.interview_time && (
             <span className="block text-xs text-[#999]">{row.interview_time}</span>
           )}
@@ -281,7 +344,7 @@ function NewMCRow({ row, onSelect, onRefresh }) {
         <TD onClick={(e) => e.stopPropagation()}>
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
-            options={STAGES}
+            options={getNextStageOptions(stage)}
             onSelect={handleStageChange}
           />
         </TD>
@@ -314,6 +377,7 @@ function NewMCRow({ row, onSelect, onRefresh }) {
           type={prompt.type}
           mcId={row.id}
           supabaseClient={supabase}
+          existingData={row}
           onClose={() => { setPrompt(null); onRefresh() }}
         />
       )}
@@ -383,7 +447,9 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
       await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
     }
 
-    if (INTERVIEW_STAGES.has(newStage)) {
+    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
+      setPrompt({ type: 'assessment' })
+    } else if (INTERVIEW_STAGES.has(newStage)) {
       setPrompt({ type: 'interview' })
     } else if (newStage === 'Offer') {
       setPrompt({ type: 'offer' })
@@ -436,7 +502,7 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
         <TD onClick={(e) => e.stopPropagation()}>
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
-            options={STAGES}
+            options={getNextStageOptions(stage)}
             onSelect={handleStageChange}
           />
         </TD>
@@ -481,6 +547,7 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
           type={prompt.type}
           mcId={row.id}
           supabaseClient={supabase}
+          existingData={row}
           onClose={() => { setPrompt(null); onRefresh() }}
         />
       )}
@@ -624,7 +691,9 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
       await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
     }
 
-    if (INTERVIEW_STAGES.has(newStage)) {
+    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
+      setPrompt({ type: 'assessment' })
+    } else if (INTERVIEW_STAGES.has(newStage)) {
       setPrompt({ type: 'interview' })
     } else if (newStage === 'Offer') {
       setPrompt({ type: 'offer' })
@@ -672,7 +741,7 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
           {mc ? (
             <InlineDropdown
               badge={<StageBadge value={stage || null} />}
-              options={STAGES}
+              options={getNextStageOptions(stage)}
               onSelect={handleStageChange}
             />
           ) : (
@@ -704,6 +773,7 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
           type={prompt.type}
           mcId={mc.id}
           supabaseClient={supabase}
+          existingData={mc}
           onClose={() => { setPrompt(null); onRefresh() }}
         />
       )}

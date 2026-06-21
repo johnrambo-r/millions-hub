@@ -3,22 +3,26 @@ import { useEffect, useRef, useState } from 'react'
 // ─── StagePromptModal ────────────────────────────────────────────────────────
 // Shown after a stage change to capture optional interview/offer/joining details.
 
-export function StagePromptModal({ type, mcId, supabaseClient, onClose }) {
+export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}, onClose }) {
   const [saving, setSaving] = useState(false)
-  const [interviewDate, setInterviewDate] = useState('')
-  const [interviewTime, setInterviewTime] = useState('')
-  const [offeredCtc, setOfferedCtc] = useState('')
-  const [billingAmount, setBillingAmount] = useState('')
-  const [dateOfJoining, setDateOfJoining] = useState('')
+  const [interviewDate, setInterviewDate] = useState(existingData.interview_date ?? '')
+  const [interviewTime, setInterviewTime] = useState(existingData.interview_time ?? '')
+  const [offeredCtc, setOfferedCtc] = useState(existingData.offered_ctc ?? '')
+  const [billingAmount, setBillingAmount] = useState(existingData.billing_value_approx ?? '')
+  const [dateOfJoining, setDateOfJoining] = useState(existingData.date_of_joining ?? '')
+  const [assessmentDate, setAssessmentDate] = useState(existingData.assessment_date ?? '')
 
   const title =
-    type === 'interview' ? 'Interview Details' :
-    type === 'offer'     ? 'Offer Details' :
+    type === 'assessment' ? 'Assessment Details' :
+    type === 'interview'  ? 'Interview Details' :
+    type === 'offer'      ? 'Offer Details' :
     'Joining Details'
 
   async function handleSave() {
     const updates = {}
-    if (type === 'interview') {
+    if (type === 'assessment') {
+      if (assessmentDate) updates.assessment_date = assessmentDate
+    } else if (type === 'interview') {
       if (interviewDate) updates.interview_date = interviewDate
       if (interviewTime) updates.interview_time = interviewTime
     } else if (type === 'offer') {
@@ -56,6 +60,13 @@ export function StagePromptModal({ type, mcId, supabaseClient, onClose }) {
         </div>
 
         <div className="space-y-3">
+          {type === 'assessment' && (
+            <label className="block">
+              <span className="text-xs text-[#999] mb-1 block">Assessment Date</span>
+              <input type="date" value={assessmentDate} onChange={(e) => setAssessmentDate(e.target.value)} className={inputCls} />
+            </label>
+          )}
+
           {type === 'interview' && (
             <>
               <label className="block">
