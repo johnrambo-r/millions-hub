@@ -11,11 +11,16 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
   const [billingAmount, setBillingAmount] = useState(existingData.billing_value_approx ?? '')
   const [dateOfJoining, setDateOfJoining] = useState(existingData.date_of_joining ?? '')
   const [assessmentDate, setAssessmentDate] = useState(existingData.assessment_date ?? '')
+  const [offerDate, setOfferDate] = useState(existingData.offer_date ?? '')
+  const [tentativeInvoiceDate, setTentativeInvoiceDate] = useState(existingData.tentative_invoice_date ?? '')
+  const [invoiceDate, setInvoiceDate] = useState(existingData.invoice_date ?? existingData.date_of_joining ?? '')
+  const [billingValueFinal, setBillingValueFinal] = useState(existingData.billing_value_final ?? existingData.billing_value_approx ?? '')
 
   const title =
     type === 'assessment' ? 'Assessment Details' :
     type === 'interview'  ? 'Interview Details' :
     type === 'offer'      ? 'Offer Details' :
+    type === 'invoice'    ? 'Invoice Details' :
     'Joining Details'
 
   async function handleSave() {
@@ -26,9 +31,14 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
       if (interviewDate) updates.interview_date = interviewDate
       if (interviewTime) updates.interview_time = interviewTime
     } else if (type === 'offer') {
-      if (offeredCtc)     updates.offered_ctc           = parseFloat(offeredCtc)
-      if (billingAmount)  updates.billing_value_approx  = parseFloat(billingAmount)
-      if (dateOfJoining)  updates.date_of_joining       = dateOfJoining
+      if (offerDate)             updates.offer_date             = offerDate
+      if (offeredCtc)            updates.offered_ctc            = parseFloat(offeredCtc)
+      if (billingAmount)         updates.billing_value_approx   = parseFloat(billingAmount)
+      if (dateOfJoining)         updates.date_of_joining        = dateOfJoining
+      if (tentativeInvoiceDate)  updates.tentative_invoice_date = tentativeInvoiceDate
+    } else if (type === 'invoice') {
+      if (invoiceDate)       updates.invoice_date        = invoiceDate
+      if (billingValueFinal) updates.billing_value_final = parseFloat(billingValueFinal)
     } else if (type === 'joining') {
       if (billingAmount)  updates.billing_value_approx  = parseFloat(billingAmount)
       if (dateOfJoining)  updates.date_of_joining       = dateOfJoining
@@ -49,14 +59,16 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-[#0F0F12]">
-            {title}{' '}
-            <span className="text-[#999] font-normal text-xs">(optional)</span>
+            {title}
+            {type !== 'invoice' && <>{' '}<span className="text-[#999] font-normal text-xs">(optional)</span></>}
           </h3>
-          <button onClick={onClose} className="text-[#999] hover:text-[#0F0F12] transition-colors">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-              <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
-            </svg>
-          </button>
+          {type !== 'invoice' && (
+            <button onClick={onClose} className="text-[#999] hover:text-[#0F0F12] transition-colors">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
 
         <div className="space-y-3">
@@ -83,6 +95,10 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
           {type === 'offer' && (
             <>
               <label className="block">
+                <span className="text-xs text-[#999] mb-1 block">Offer Date</span>
+                <input type="date" value={offerDate} onChange={(e) => setOfferDate(e.target.value)} className={inputCls} />
+              </label>
+              <label className="block">
                 <span className="text-xs text-[#999] mb-1 block">Offered CTC (₹)</span>
                 <input type="number" min="0" value={offeredCtc} onChange={(e) => setOfferedCtc(e.target.value)} placeholder="e.g. 1500000" className={inputCls} />
               </label>
@@ -94,6 +110,24 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
                 <span className="text-xs text-[#999] mb-1 block">Date of Joining</span>
                 <input type="date" value={dateOfJoining} onChange={(e) => setDateOfJoining(e.target.value)} className={inputCls} />
               </label>
+              <label className="block">
+                <span className="text-xs text-[#999] mb-1 block">Tentative Invoice Date</span>
+                <input type="date" value={tentativeInvoiceDate} onChange={(e) => setTentativeInvoiceDate(e.target.value)} className={inputCls} />
+              </label>
+            </>
+          )}
+
+          {type === 'invoice' && (
+            <>
+              <label className="block">
+                <span className="text-xs text-[#999] mb-1 block">Invoice Date <span className="text-red-500">*</span></span>
+                <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className={inputCls} />
+              </label>
+              <label className="block">
+                <span className="text-xs text-[#999] mb-1 block">Final Billing Amount (₹) <span className="text-red-500">*</span></span>
+                <input type="number" min="0" value={billingValueFinal} onChange={(e) => setBillingValueFinal(e.target.value)} className={inputCls} />
+              </label>
+              <p className="text-xs text-[#999] mt-1">Both fields are required to confirm Invoice Raised status.</p>
             </>
           )}
 
@@ -114,17 +148,19 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
         <div className="flex items-center gap-2 mt-5">
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || (type === 'invoice' && (!invoiceDate || !billingValueFinal))}
             className="h-8 px-4 rounded-lg text-sm font-semibold text-white bg-[#5E6AD2] hover:opacity-90 disabled:opacity-50 transition"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
-          <button
-            onClick={onClose}
-            className="h-8 px-4 rounded-lg text-sm text-[#666] border border-[#F0F0F4] hover:bg-[#F5F5F8] transition"
-          >
-            Skip
-          </button>
+          {type !== 'invoice' && (
+            <button
+              onClick={onClose}
+              className="h-8 px-4 rounded-lg text-sm text-[#666] border border-[#F0F0F4] hover:bg-[#F5F5F8] transition"
+            >
+              Skip
+            </button>
+          )}
         </div>
       </div>
     </div>
