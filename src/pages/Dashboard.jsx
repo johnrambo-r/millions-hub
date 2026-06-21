@@ -104,7 +104,7 @@ export default function Dashboard() {
               >
                 {activeList.map((c) => (
                   <CandidateRow
-                    key={c.id}
+                    key={c._mc_id}
                     candidate={c}
                     badgeLabel={activeConfig.badgeLabel(c)}
                     badgeColor={activeConfig.badgeColor}
