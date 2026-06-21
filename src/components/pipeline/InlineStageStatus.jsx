@@ -62,11 +62,13 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
             {title}
             {type !== 'invoice' && <>{' '}<span className="text-[#999] font-normal text-xs">(optional)</span></>}
           </h3>
-          <button onClick={onClose} className="text-[#999] hover:text-[#0F0F12] transition-colors">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-              <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
-            </svg>
-          </button>
+          {type !== 'invoice' && (
+            <button onClick={onClose} className="text-[#999] hover:text-[#0F0F12] transition-colors">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
 
         <div className="space-y-3">
@@ -118,13 +120,14 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
           {type === 'invoice' && (
             <>
               <label className="block">
-                <span className="text-xs text-[#999] mb-1 block">Invoice Date</span>
+                <span className="text-xs text-[#999] mb-1 block">Invoice Date <span className="text-red-500">*</span></span>
                 <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className={inputCls} />
               </label>
               <label className="block">
-                <span className="text-xs text-[#999] mb-1 block">Final Billing Amount (₹)</span>
+                <span className="text-xs text-[#999] mb-1 block">Final Billing Amount (₹) <span className="text-red-500">*</span></span>
                 <input type="number" min="0" value={billingValueFinal} onChange={(e) => setBillingValueFinal(e.target.value)} className={inputCls} />
               </label>
+              <p className="text-xs text-[#999] mt-1">Both fields are required to confirm Invoice Raised status.</p>
             </>
           )}
 
@@ -145,17 +148,19 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
         <div className="flex items-center gap-2 mt-5">
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || (type === 'invoice' && (!invoiceDate || !billingValueFinal))}
             className="h-8 px-4 rounded-lg text-sm font-semibold text-white bg-[#5E6AD2] hover:opacity-90 disabled:opacity-50 transition"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
-          <button
-            onClick={onClose}
-            className="h-8 px-4 rounded-lg text-sm text-[#666] border border-[#F0F0F4] hover:bg-[#F5F5F8] transition"
-          >
-            Skip
-          </button>
+          {type !== 'invoice' && (
+            <button
+              onClick={onClose}
+              className="h-8 px-4 rounded-lg text-sm text-[#666] border border-[#F0F0F4] hover:bg-[#F5F5F8] transition"
+            >
+              Skip
+            </button>
+          )}
         </div>
       </div>
     </div>
