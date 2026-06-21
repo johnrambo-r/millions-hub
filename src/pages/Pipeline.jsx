@@ -232,14 +232,13 @@ function NewMCRow({ row, onSelect, onRefresh }) {
     const oldStatus = status
     setStatus(newStatus)
 
-    const updates = { status: newStatus, status_changed_at: new Date().toISOString() }
-    if (newStatus === 'Invoice Raised' && row.billing_value_approx != null) {
-      updates.billing_value_final = row.billing_value_approx
-    }
-
-    await supabase.from('mandate_candidates').update(updates).eq('id', row.id)
+    await supabase.from('mandate_candidates').update({ status: newStatus, status_changed_at: new Date().toISOString() }).eq('id', row.id)
     await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    onRefresh()
+    if (newStatus === 'Invoice Raised') {
+      setPrompt({ type: 'invoice' })
+    } else {
+      onRefresh()
+    }
   }
 
   const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
@@ -466,14 +465,13 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
     const oldStatus = status
     setStatus(newStatus)
 
-    const updates = { status: newStatus, status_changed_at: new Date().toISOString() }
-    if (newStatus === 'Invoice Raised' && row.billing_value_approx != null) {
-      updates.billing_value_final = row.billing_value_approx
-    }
-
-    await supabase.from('mandate_candidates').update(updates).eq('id', row.id)
+    await supabase.from('mandate_candidates').update({ status: newStatus, status_changed_at: new Date().toISOString() }).eq('id', row.id)
     await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    onRefresh()
+    if (newStatus === 'Invoice Raised') {
+      setPrompt({ type: 'invoice' })
+    } else {
+      onRefresh()
+    }
   }
 
   const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
@@ -715,14 +713,13 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
     const oldStatus = status
     setStatus(newStatus)
 
-    const updates = { status: newStatus, status_changed_at: new Date().toISOString() }
-    if (newStatus === 'Invoice Raised' && mc.billing_value_approx != null) {
-      updates.billing_value_final = mc.billing_value_approx
-    }
-
-    await supabase.from('mandate_candidates').update(updates).eq('id', mc.id)
+    await supabase.from('mandate_candidates').update({ status: newStatus, status_changed_at: new Date().toISOString() }).eq('id', mc.id)
     await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    onRefresh()
+    if (newStatus === 'Invoice Raised') {
+      setPrompt({ type: 'invoice' })
+    } else {
+      onRefresh()
+    }
   }
 
   const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []

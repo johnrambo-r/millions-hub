@@ -559,7 +559,11 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
     setStatus(newStatus)
     await save({ status: newStatus, status_changed_at: new Date().toISOString() })
     await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    onRefresh()
+    if (newStatus === 'Invoice Raised') {
+      setPrompt({ type: 'invoice' })
+    } else {
+      onRefresh()
+    }
   }
 
   async function handleUnlink() {
