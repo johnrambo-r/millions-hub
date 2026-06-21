@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react'
 import { Navigate } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import { supabase } from '../lib/supabase'
-import { supabaseAdmin } from '../lib/supabaseAdmin'
 import useRole from '../hooks/useRole'
 import { useAuth } from '../context/AuthContext'
 
@@ -74,45 +73,40 @@ function InviteModal({ onClose, onInvited, currentUserId }) {
       setError('Name and email are required.')
       return
     }
-    if (!supabaseAdmin) {
-      setError('Service role key not configured. Add VITE_SUPABASE_SERVICE_ROLE_KEY to your .env file.')
-      return
-    }
     setLoading(true)
     setError('')
 
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email.trim(),
-      { data: { name: name.trim() } },
-    )
-    if (authError) {
-      setError(authError.message)
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData?.session?.access_token
+
+    if (!accessToken) {
+      setError('Your session has expired. Please log in again.')
       setLoading(false)
       return
     }
 
-    const userId = authData.user.id
-    const now = new Date().toISOString()
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .upsert({
-        id: userId,
-        name: name.trim(),
-        email: email.trim(),
-        role,
-        active: true,
-        invited_by: currentUserId,
-        created_at: now,
-        updated_at: now,
-      })
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'apiKey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), role }),
+      }
+    )
 
+    const result = await response.json()
     setLoading(false)
-    if (profileError) {
-      setError(profileError.message)
+
+    if (!response.ok) {
+      setError(result.error ?? 'Failed to invite user.')
       return
     }
 
-    onInvited({ id: userId, name: name.trim(), email: email.trim(), role, active: true, created_at: now })
+    onInvited(result)
   }
 
   return (
