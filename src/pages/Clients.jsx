@@ -102,11 +102,13 @@ function ClientsTable({ rows, loading, onSelect }) {
           {rows.map((row) => (
             <tr
               key={row.id}
-              onClick={() => onSelect(row)}
-              className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors"
+              className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors"
             >
               <TD>
-                <span className="font-medium text-[#0F0F12] block truncate max-w-[180px]">
+                <span
+                  onClick={(e) => { e.stopPropagation(); onSelect(row) }}
+                  className="font-medium text-[#0F0F12] block truncate max-w-[180px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
+                >
                   {row.name}
                 </span>
               </TD>

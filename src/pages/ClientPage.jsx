@@ -169,13 +169,13 @@ function MandateCard({ mandate }) {
     : null
 
   return (
-    <button
-      onClick={() => navigate('/mandates/' + mandate.id)}
-      className="w-full rounded-lg border border-[#F0F0F4] bg-white px-4 py-3 flex items-start gap-3 text-left hover:bg-[#FAFAFA] hover:border-[#E0E0EA] transition-colors group"
-    >
+    <div className="w-full rounded-lg border border-[#F0F0F4] bg-white px-4 py-3 flex items-start gap-3 text-left hover:bg-[#FAFAFA] hover:border-[#E0E0EA] transition-colors group">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-sm font-medium text-[#0F0F12] truncate">{mandate.title}</p>
+          <span
+            onClick={(e) => { e.stopPropagation(); navigate('/mandates/' + mandate.id) }}
+            className="text-sm font-medium text-[#0F0F12] truncate cursor-pointer hover:text-[#5E6AD2] hover:underline"
+          >{mandate.title}</span>
           {mandate.job_id && (
             <span className="font-mono text-xs text-[#999] shrink-0">{mandate.job_id}</span>
           )}
@@ -194,7 +194,7 @@ function MandateCard({ mandate }) {
       >
         <path d="M6 3l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-    </button>
+    </div>
   )
 }
 

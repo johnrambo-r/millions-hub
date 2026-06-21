@@ -322,11 +322,13 @@ function NewMCRow({ row, onSelect, onRefresh }) {
   return (
     <>
       <tr
-        onClick={() => onSelect(c)}
-        className={`border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors ${rowBg}`}
+        className={`border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors ${rowBg}`}
       >
         <TD>
-          <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{c.name ?? '—'}</span>
+          <span
+            onClick={(e) => { e.stopPropagation(); onSelect(c) }}
+            className="font-medium text-[#0F0F12] block truncate max-w-[150px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
+          >{c.name ?? '—'}</span>
           <span className="text-xs text-[#999] font-mono block mt-0.5">{row.applicant_id ?? '—'}</span>
         </TD>
         <TD>
@@ -479,14 +481,16 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
   return (
     <>
       <tr
-        onClick={() => onSelect(c)}
-        className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors"
+        className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors"
       >
         <TD className="font-mono text-xs text-[#999] whitespace-nowrap">
           {row.applicant_id ?? '—'}
         </TD>
         <TD>
-          <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{c.name ?? '—'}</span>
+          <span
+            onClick={(e) => { e.stopPropagation(); onSelect(c) }}
+            className="font-medium text-[#0F0F12] block truncate max-w-[150px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
+          >{c.name ?? '—'}</span>
         </TD>
         <TD>
           <span className="text-[#666] block truncate max-w-[140px]">{c.skill_role ?? '—'}</span>
@@ -619,12 +623,14 @@ function UnassignedTable({ rows, loading, onSelect, onAssign }) {
             return (
               <tr
                 key={row.id}
-                onClick={() => onSelect(row)}
-                className={`border-b border-[#F0F0F4] hover:opacity-90 cursor-pointer transition-colors ${bg}`}
+                className={`border-b border-[#F0F0F4] hover:opacity-90 transition-colors ${bg}`}
               >
                 <TD className="font-mono text-xs text-[#999] whitespace-nowrap">{row.id}</TD>
                 <TD>
-                  <span className="font-medium text-[#0F0F12] block truncate max-w-[160px]">{row.name}</span>
+                  <span
+                    onClick={(e) => { e.stopPropagation(); onSelect(row) }}
+                    className="font-medium text-[#0F0F12] block truncate max-w-[160px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
+                  >{row.name}</span>
                 </TD>
                 <TD>
                   <span className="text-[#666] block truncate max-w-[140px]">{row.skill_role ?? '—'}</span>
@@ -724,12 +730,14 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
   return (
     <>
       <tr
-        onClick={() => onSelect(row)}
-        className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] cursor-pointer transition-colors"
+        className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors"
       >
         <TD className="font-mono text-xs text-[#999] whitespace-nowrap">{row.id}</TD>
         <TD>
-          <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{row.name}</span>
+          <span
+            onClick={(e) => { e.stopPropagation(); onSelect(row) }}
+            className="font-medium text-[#0F0F12] block truncate max-w-[150px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
+          >{row.name}</span>
         </TD>
         <TD>
           <span className="text-[#666] block truncate max-w-[140px]">{row.skill_role ?? '—'}</span>

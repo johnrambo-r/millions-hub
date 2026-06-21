@@ -284,18 +284,18 @@ function SnapshotStrip({ mandateCandidates: mcs, mandate }) {
   }, [mcs, mandate])
 
   const tiles = [
-    { label: 'Total Assigned', value: snap.total,      accent: 'text-[#0F0F12]' },
-    { label: 'CVs Sent',       value: snap.cvsSent,    accent: 'text-indigo-600' },
-    { label: 'In Pipeline',    value: snap.inPipeline, accent: 'text-violet-600' },
-    { label: 'Interviews',     value: snap.interviews,  accent: 'text-amber-600' },
-    { label: 'Offers Out',     value: snap.offersOut,  accent: 'text-blue-600' },
-    { label: 'Placed',         value: snap.placed,     accent: 'text-emerald-600' },
+    { label: 'Total Assigned', value: snap.total,          accent: 'text-[#0F0F12]' },
+    { label: 'CVs Sent',       value: snap.cvsSent,        accent: 'text-indigo-600' },
+    ...(snap.hasAssessments ? [{ label: 'Assessments', value: snap.assessmentCount, accent: 'text-slate-600' }] : []),
+    { label: 'Interviews',     value: snap.interviews,     accent: 'text-amber-600' },
+    { label: 'In Pipeline',    value: snap.inPipeline,     accent: 'text-violet-600' },
+    { label: 'Offers Out',     value: snap.offersOut,      accent: 'text-blue-600' },
+    { label: 'Placed',         value: snap.placed,         accent: 'text-emerald-600' },
     {
       label: 'Days Open',
       value: snap.daysOpen ?? '—',
       accent: snap.daysOpen >= 60 ? 'text-red-600' : snap.daysOpen >= 30 ? 'text-amber-600' : 'text-[#0F0F12]',
     },
-    ...(snap.hasAssessments ? [{ label: 'Assessments', value: snap.assessmentCount, accent: 'text-slate-600' }] : []),
   ]
 
   return (
@@ -600,8 +600,7 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
   return (
     <>
       <tr
-        className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors group cursor-pointer"
-        onClick={() => onRowClick(mc.candidate_id)}
+        className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors group"
       >
         {showBulkCheckbox && (
           <td className="px-3 py-3 w-8" onClick={(e) => e.stopPropagation()}>
@@ -618,7 +617,10 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
 
         {/* Candidate */}
         <td className="px-4 py-3 text-sm">
-          <p className="font-medium text-[#0F0F12] truncate max-w-[160px]">{mc.candidate?.name ?? '—'}</p>
+          <span
+            onClick={(e) => { e.stopPropagation(); onRowClick(mc.candidate_id) }}
+            className="font-medium text-[#0F0F12] truncate max-w-[160px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
+          >{mc.candidate?.name ?? '—'}</span>
           <p className="text-xs text-[#999] mt-0.5 font-mono">{mc.applicant_id ?? '—'}</p>
         </td>
 
