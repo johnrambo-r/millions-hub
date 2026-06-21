@@ -15,10 +15,10 @@ export function useProfile() {
       .eq('id', session.user.id)
       .single()
       .then(({ data, error }) => {
-        console.log('[useProfile] response →', { data, error })
+        if (error) console.error('[useProfile] error:', error.message)
         setProfile(data)
       })
-  }, [session])
+  }, [session?.user?.id])
 
   return profile
 }
