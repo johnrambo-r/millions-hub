@@ -6,7 +6,7 @@ import UnsavedChangesModal from '../components/UnsavedChangesModal'
 import useRole from '../hooks/useRole'
 import { useAuth } from '../context/AuthContext'
 import {
-  STAGES, STAGE_STATUS_MAP, ACTIVE_STATUSES, PLACED_STATUSES,
+  STAGES, STAGE_STATUS_MAP, ACTIVE_STATUSES, PLACED_STATUSES, getNextStageOptions,
 } from '../lib/candidateConstants'
 import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineStageStatus'
 import { StageBadge, StatusBadge as CandidateStatusBadge } from '../components/pipeline/StageBadge'
@@ -500,6 +500,19 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
   const [unlinking, setUnlinking]         = useState(false)
   const [saving, setSaving]               = useState(false)
   const [prompt, setPrompt]               = useState(null)
+  const [rescheduling, setRescheduling] = useState(false)
+  const [rescheduleDate, setRescheduleDate] = useState(mc.interview_date ?? '')
+  const [rescheduleTime, setRescheduleTime] = useState(mc.interview_time ?? '')
+  const rescheduleRef = useRef(null)
+
+  useEffect(() => {
+    if (!rescheduling) return
+    function handler(e) {
+      if (rescheduleRef.current && !rescheduleRef.current.contains(e.target)) setRescheduling(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [rescheduling])
 
   const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
   const changedBy     = session?.user?.id
@@ -615,7 +628,7 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
         <td className="px-4 py-3 text-sm">
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
-            options={STAGES}
+            options={getNextStageOptions(stage)}
             onSelect={handleStageChange}
             disabled={!canEdit}
           />
@@ -635,7 +648,56 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
         <td className="px-4 py-3 text-sm min-w-[120px]">
           <div className="space-y-0.5">
             {interviewStr && (
-              <p className="text-xs text-[#555] truncate">{interviewStr}</p>
+              <p className="text-xs text-[#555] flex items-center">
+                <span className="truncate">{interviewStr}</span>
+                {INTERVIEW_STAGES.has(stage) && mc.interview_date && (
+                  <span className="relative shrink-0" ref={rescheduleRef}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setRescheduling(true) }}
+                      className="ml-1 text-[#999] hover:text-[#5E6AD2] transition-colors"
+                      title="Reschedule"
+                    >
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3 inline">
+                        <path d="M11.5 2.5l2 2L5 13l-3 1 1-3 8.5-8.5z" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                    {rescheduling && (
+                      <div className="absolute top-full left-0 bg-white border border-[#E0E0E8] rounded-lg shadow-lg p-3 z-50 min-w-[200px]">
+                        <label className="block mb-2">
+                          <span className="text-xs text-[#999] mb-1 block">Date</span>
+                          <input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} className="h-8 w-full rounded-lg border border-[#F0F0F4] px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition" />
+                        </label>
+                        <label className="block mb-3">
+                          <span className="text-xs text-[#999] mb-1 block">Time</span>
+                          <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} className="h-8 w-full rounded-lg border border-[#F0F0F4] px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition" />
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation()
+                              const oldVal = [mc.interview_date, mc.interview_time].filter(Boolean).join(' ')
+                              const newVal = [rescheduleDate, rescheduleTime].filter(Boolean).join(' ')
+                              await supabase.from('mandate_candidates').update({ interview_date: rescheduleDate || null, interview_time: rescheduleTime || null }).eq('id', mc.id)
+                              await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'interview_reschedule', oldValue: oldVal, newValue: newVal })
+                              setRescheduling(false)
+                              onRefresh()
+                            }}
+                            className="h-7 px-3 rounded-lg text-xs font-semibold text-white bg-[#5E6AD2] hover:opacity-90 transition"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setRescheduling(false) }}
+                            className="h-7 px-3 rounded-lg text-xs text-[#666] border border-[#F0F0F4] hover:bg-[#F5F5F8] transition"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </span>
+                )}
+              </p>
             )}
             {ctcStr && (
               <p className="text-xs text-[#555]">
@@ -692,6 +754,7 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
           type={prompt.type}
           mcId={mc.id}
           supabaseClient={supabase}
+          existingData={mc}
           onClose={() => { setPrompt(null); onRefresh() }}
         />
       )}

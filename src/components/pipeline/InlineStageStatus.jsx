@@ -3,13 +3,13 @@ import { useEffect, useRef, useState } from 'react'
 // ─── StagePromptModal ────────────────────────────────────────────────────────
 // Shown after a stage change to capture optional interview/offer/joining details.
 
-export function StagePromptModal({ type, mcId, supabaseClient, onClose }) {
+export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}, onClose }) {
   const [saving, setSaving] = useState(false)
-  const [interviewDate, setInterviewDate] = useState('')
-  const [interviewTime, setInterviewTime] = useState('')
-  const [offeredCtc, setOfferedCtc] = useState('')
-  const [billingAmount, setBillingAmount] = useState('')
-  const [dateOfJoining, setDateOfJoining] = useState('')
+  const [interviewDate, setInterviewDate] = useState(existingData.interview_date ?? '')
+  const [interviewTime, setInterviewTime] = useState(existingData.interview_time ?? '')
+  const [offeredCtc, setOfferedCtc] = useState(existingData.offered_ctc ?? '')
+  const [billingAmount, setBillingAmount] = useState(existingData.billing_value_approx ?? '')
+  const [dateOfJoining, setDateOfJoining] = useState(existingData.date_of_joining ?? '')
 
   const title =
     type === 'interview' ? 'Interview Details' :

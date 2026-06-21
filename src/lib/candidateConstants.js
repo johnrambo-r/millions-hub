@@ -62,3 +62,8 @@ export const TALENT_POOL_STATUSES = [
 export const PLACED_STATUSES = ['Joined', 'JYTR', 'Invoice Raised']
 
 export const PASSING_YEARS = Array.from({ length: 2025 - 1985 + 1 }, (_, i) => 2025 - i)
+
+export function getNextStageOptions(currentStage) {
+  if (currentStage === 'CV') return ['L1']
+  return STAGES.filter((s) => s !== currentStage)
+}
