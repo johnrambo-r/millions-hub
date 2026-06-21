@@ -8,6 +8,7 @@ import {
 import UnsavedChangesModal from '../UnsavedChangesModal'
 import { generateApplicantId } from '../../lib/generateApplicantId'
 import useRole from '../../hooks/useRole'
+import { logActivity } from '../../lib/activityLog'
 
 function Field({ label, children, colSpan2 = false }) {
   return (
@@ -222,6 +223,12 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   const [mcEditFields, setMcEditFields] = useState({})
   const [mcSaving, setMcSaving] = useState(false)
 
+  // Interview reschedule (all roles)
+  const [reschedulingMcId, setReschedulingMcId] = useState(null)
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [rescheduleTime, setRescheduleTime] = useState('')
+  const [rescheduling, setRescheduling] = useState(false)
+
   const isOpen = !!candidate
 
   useEffect(() => {
@@ -254,6 +261,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       setMandatesLoading(false)
       setShowLinkModal(false)
       setEditingMcId(null)
+      setReschedulingMcId(null)
       return
     }
 
@@ -821,7 +829,23 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                         (interviewLine || mc.offered_ctc != null || mc.billing_value_approx != null || mc.billing_value_final != null || mc.date_of_joining) && (
                           <div className="mt-2 space-y-0.5">
                             {interviewLine && (
-                              <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Interview</span>{interviewLine}</p>
+                              <p className="text-xs text-[#555] flex items-center gap-1">
+                                <span className="text-[#999] mr-1">Interview</span>{interviewLine}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setReschedulingMcId(mc.id)
+                                    setRescheduleDate(mc.interview_date ?? '')
+                                    setRescheduleTime(mc.interview_time ?? '')
+                                  }}
+                                  className="text-[#999] hover:text-[#5E6AD2] transition-colors ml-0.5"
+                                  title="Reschedule"
+                                >
+                                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
+                                    <path d="M11.5 2.5l2 2L5 13l-3 1 1-3 8.5-8.5z" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                </button>
+                              </p>
                             )}
                             {mc.offered_ctc != null && (
                               <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Offered CTC</span>{formatMoney(mc.offered_ctc)}</p>
@@ -837,6 +861,55 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                             )}
                           </div>
                         )
+                      )}
+                      {reschedulingMcId === mc.id && (
+                        <div className="mt-2 flex items-center gap-2 bg-[#FAFAFA] rounded-lg p-2.5 border border-[#F0F0F4]">
+                          <input
+                            type="date"
+                            value={rescheduleDate}
+                            onChange={(e) => setRescheduleDate(e.target.value)}
+                            className="h-7 rounded border border-[#E0E0E8] px-2 text-xs flex-1"
+                          />
+                          <input
+                            type="time"
+                            value={rescheduleTime}
+                            onChange={(e) => setRescheduleTime(e.target.value)}
+                            className="h-7 rounded border border-[#E0E0E8] px-2 text-xs flex-1"
+                          />
+                          <button
+                            onClick={async () => {
+                              setRescheduling(true)
+                              const oldVal = interviewLine
+                              await supabase.from('mandate_candidates').update({
+                                interview_date: rescheduleDate || null,
+                                interview_time: rescheduleTime || null,
+                              }).eq('id', mc.id)
+                              const newVal = [rescheduleDate, rescheduleTime].filter(Boolean).join(' ')
+                              await logActivity({
+                                candidateId: mc.candidate_id,
+                                mandateId: mc.mandate_id,
+                                applicantId: mc.applicant_id,
+                                changedBy: session?.user?.id,
+                                changeType: 'interview_reschedule',
+                                oldValue: oldVal,
+                                newValue: newVal,
+                              })
+                              setRescheduling(false)
+                              setReschedulingMcId(null)
+                              loadLinkedMandates(candidate.id)
+                            }}
+                            disabled={rescheduling}
+                            className="h-7 px-2.5 rounded-lg text-xs font-semibold text-white bg-[#5E6AD2] hover:opacity-90 disabled:opacity-50 transition shrink-0"
+                          >
+                            {rescheduling ? '…' : 'Save'}
+                          </button>
+                          <button
+                            onClick={() => setReschedulingMcId(null)}
+                            className="h-7 px-2.5 rounded-lg text-xs text-[#666] border border-[#E0E0E8] hover:bg-white transition shrink-0"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       )}
                     </li>
                   )
