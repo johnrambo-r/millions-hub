@@ -189,7 +189,7 @@ function LinkMandateModal({ candidateId, linkedMandateIds, userId, onClose, onLi
 
 export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSelect, onPendingResolved, onPendingCancelled }) {
   const { session } = useAuth()
-  const { role, loading: roleLoading } = useRole()
+  const { role, isRecruiter, loading: roleLoading } = useRole()
   const userId = session?.user?.id
 
   const [activityLog, setActivityLog] = useState([])
@@ -216,6 +216,11 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   const [linkedMandates, setLinkedMandates] = useState([])
   const [mandatesLoading, setMandatesLoading] = useState(false)
   const [showLinkModal, setShowLinkModal] = useState(false)
+
+  // Inline MC field editing (AM/Founder only)
+  const [editingMcId, setEditingMcId] = useState(null)
+  const [mcEditFields, setMcEditFields] = useState({})
+  const [mcSaving, setMcSaving] = useState(false)
 
   const isOpen = !!candidate
 
@@ -248,6 +253,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       setLinkedMandates([])
       setMandatesLoading(false)
       setShowLinkModal(false)
+      setEditingMcId(null)
       return
     }
 
@@ -374,7 +380,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     setMandatesLoading(true)
     supabase
       .from('mandate_candidates')
-      .select('id, mandate_id, stage, status, applicant_id, status_changed_at, linked_at, interview_date, interview_time, offered_ctc, billing_value_approx, billing_value_final, date_of_joining, mandates(id, title, job_id, clients(id, name))')
+      .select('id, mandate_id, stage, status, applicant_id, status_changed_at, linked_at, interview_date, interview_time, offered_ctc, billing_value_approx, billing_value_final, date_of_joining, offer_date, tentative_invoice_date, invoice_date, mandates(id, title, job_id, clients(id, name))')
       .eq('candidate_id', candidateId)
       .order('linked_at', { ascending: false })
       .then(({ data, error }) => {
@@ -724,25 +730,113 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${daysBadgeColor(days)}`}>
                           {days}d
                         </span>
+                        {!isRecruiter && ['Offer', 'Joining'].includes(mc.stage) && editingMcId !== mc.id && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingMcId(mc.id)
+                              setMcEditFields({
+                                offer_date:             mc.offer_date ?? '',
+                                offered_ctc:            mc.offered_ctc?.toString() ?? '',
+                                billing_value_approx:   mc.billing_value_approx?.toString() ?? '',
+                                date_of_joining:        mc.date_of_joining ?? '',
+                                tentative_invoice_date: mc.tentative_invoice_date ?? '',
+                                invoice_date:           mc.invoice_date ?? '',
+                                billing_value_final:    mc.billing_value_final?.toString() ?? '',
+                              })
+                            }}
+                            className="text-[#999] hover:text-[#5E6AD2] transition-colors ml-1"
+                            title="Edit offer/joining details"
+                          >
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+                              <path d="M11.5 2.5l2 2L5 13l-3 1 1-3 8.5-8.5z" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
-                      {(interviewLine || mc.offered_ctc != null || mc.billing_value_approx != null || mc.billing_value_final != null || mc.date_of_joining) && (
-                        <div className="mt-2 space-y-0.5">
-                          {interviewLine && (
-                            <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Interview</span>{interviewLine}</p>
-                          )}
-                          {mc.offered_ctc != null && (
-                            <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Offered CTC</span>{formatMoney(mc.offered_ctc)}</p>
-                          )}
-                          {mc.billing_value_approx != null && (
-                            <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Billing</span>{formatMoney(mc.billing_value_approx)}</p>
-                          )}
-                          {mc.billing_value_final != null && (
-                            <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Final Billing</span>{formatMoney(mc.billing_value_final)}</p>
-                          )}
-                          {mc.date_of_joining && (
-                            <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">DOJ</span>{formatDateShort(mc.date_of_joining)}</p>
-                          )}
+                      {editingMcId === mc.id ? (
+                        <div className="mt-2 space-y-2 bg-[#FAFAFA] rounded-lg p-3 border border-[#F0F0F4]">
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="block">
+                              <span className="text-[10px] text-[#999] mb-0.5 block">Offer Date</span>
+                              <input type="date" value={mcEditFields.offer_date} onChange={(e) => setMcEditFields(p => ({ ...p, offer_date: e.target.value }))} className="h-7 w-full rounded border border-[#E0E0E8] px-2 text-xs" />
+                            </label>
+                            <label className="block">
+                              <span className="text-[10px] text-[#999] mb-0.5 block">Offered CTC (₹)</span>
+                              <input type="number" value={mcEditFields.offered_ctc} onChange={(e) => setMcEditFields(p => ({ ...p, offered_ctc: e.target.value }))} className="h-7 w-full rounded border border-[#E0E0E8] px-2 text-xs" />
+                            </label>
+                            <label className="block">
+                              <span className="text-[10px] text-[#999] mb-0.5 block">Billing Amount (₹)</span>
+                              <input type="number" value={mcEditFields.billing_value_approx} onChange={(e) => setMcEditFields(p => ({ ...p, billing_value_approx: e.target.value }))} className="h-7 w-full rounded border border-[#E0E0E8] px-2 text-xs" />
+                            </label>
+                            <label className="block">
+                              <span className="text-[10px] text-[#999] mb-0.5 block">Date of Joining</span>
+                              <input type="date" value={mcEditFields.date_of_joining} onChange={(e) => setMcEditFields(p => ({ ...p, date_of_joining: e.target.value }))} className="h-7 w-full rounded border border-[#E0E0E8] px-2 text-xs" />
+                            </label>
+                            <label className="block">
+                              <span className="text-[10px] text-[#999] mb-0.5 block">Tentative Invoice Date</span>
+                              <input type="date" value={mcEditFields.tentative_invoice_date} onChange={(e) => setMcEditFields(p => ({ ...p, tentative_invoice_date: e.target.value }))} className="h-7 w-full rounded border border-[#E0E0E8] px-2 text-xs" />
+                            </label>
+                            <label className="block">
+                              <span className="text-[10px] text-[#999] mb-0.5 block">Invoice Date</span>
+                              <input type="date" value={mcEditFields.invoice_date} onChange={(e) => setMcEditFields(p => ({ ...p, invoice_date: e.target.value }))} className="h-7 w-full rounded border border-[#E0E0E8] px-2 text-xs" />
+                            </label>
+                            <label className="block col-span-2">
+                              <span className="text-[10px] text-[#999] mb-0.5 block">Final Billing Amount (₹)</span>
+                              <input type="number" value={mcEditFields.billing_value_final} onChange={(e) => setMcEditFields(p => ({ ...p, billing_value_final: e.target.value }))} className="h-7 w-full rounded border border-[#E0E0E8] px-2 text-xs" />
+                            </label>
+                          </div>
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              onClick={async () => {
+                                setMcSaving(true)
+                                const updates = {
+                                  offer_date:             mcEditFields.offer_date || null,
+                                  offered_ctc:            mcEditFields.offered_ctc ? parseFloat(mcEditFields.offered_ctc) : null,
+                                  billing_value_approx:   mcEditFields.billing_value_approx ? parseFloat(mcEditFields.billing_value_approx) : null,
+                                  date_of_joining:        mcEditFields.date_of_joining || null,
+                                  tentative_invoice_date: mcEditFields.tentative_invoice_date || null,
+                                  invoice_date:           mcEditFields.invoice_date || null,
+                                  billing_value_final:    mcEditFields.billing_value_final ? parseFloat(mcEditFields.billing_value_final) : null,
+                                }
+                                await supabase.from('mandate_candidates').update(updates).eq('id', mc.id)
+                                setMcSaving(false)
+                                setEditingMcId(null)
+                                loadLinkedMandates(candidate.id)
+                              }}
+                              disabled={mcSaving}
+                              className="h-7 px-3 rounded-lg text-xs font-semibold text-white bg-[#5E6AD2] hover:opacity-90 disabled:opacity-50 transition"
+                            >
+                              {mcSaving ? 'Saving…' : 'Save'}
+                            </button>
+                            <button
+                              onClick={() => setEditingMcId(null)}
+                              className="h-7 px-3 rounded-lg text-xs text-[#666] border border-[#E0E0E8] hover:bg-white transition"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        (interviewLine || mc.offered_ctc != null || mc.billing_value_approx != null || mc.billing_value_final != null || mc.date_of_joining) && (
+                          <div className="mt-2 space-y-0.5">
+                            {interviewLine && (
+                              <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Interview</span>{interviewLine}</p>
+                            )}
+                            {mc.offered_ctc != null && (
+                              <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Offered CTC</span>{formatMoney(mc.offered_ctc)}</p>
+                            )}
+                            {mc.billing_value_approx != null && (
+                              <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Billing</span>{formatMoney(mc.billing_value_approx)}</p>
+                            )}
+                            {mc.billing_value_final != null && (
+                              <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Final Billing</span>{formatMoney(mc.billing_value_final)}</p>
+                            )}
+                            {mc.date_of_joining && (
+                              <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">DOJ</span>{formatDateShort(mc.date_of_joining)}</p>
+                            )}
+                          </div>
+                        )
                       )}
                     </li>
                   )
