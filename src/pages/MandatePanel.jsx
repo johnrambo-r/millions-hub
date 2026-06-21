@@ -278,7 +278,9 @@ function SnapshotStrip({ mandateCandidates: mcs, mandate }) {
     const daysOpen = mandate?.created_at
       ? Math.floor((Date.now() - new Date(mandate.created_at)) / 86400000)
       : null
-    return { total: mcs.length, cvsSent: mcs.length, inPipeline, interviews, offersOut, placed, daysOpen }
+    const hasAssessments = mcs.some((mc) => mc.stage === 'Pre-L1 Assessment' || mc.stage === 'Post-L1 Assessment' || mc.assessment_date)
+    const assessmentCount = mcs.filter((mc) => mc.stage === 'Pre-L1 Assessment' || mc.stage === 'Post-L1 Assessment').length
+    return { total: mcs.length, cvsSent: mcs.length, inPipeline, interviews, offersOut, placed, daysOpen, hasAssessments, assessmentCount }
   }, [mcs, mandate])
 
   const tiles = [
@@ -293,6 +295,7 @@ function SnapshotStrip({ mandateCandidates: mcs, mandate }) {
       value: snap.daysOpen ?? '—',
       accent: snap.daysOpen >= 60 ? 'text-red-600' : snap.daysOpen >= 30 ? 'text-amber-600' : 'text-[#0F0F12]',
     },
+    ...(snap.hasAssessments ? [{ label: 'Assessments', value: snap.assessmentCount, accent: 'text-slate-600' }] : []),
   ]
 
   return (
@@ -544,7 +547,8 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
     if (oldStatus !== newStatus) {
       await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
     }
-    if (INTERVIEW_STAGES.has(newStage))  setPrompt({ type: 'interview' })
+    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') setPrompt({ type: 'assessment' })
+    else if (INTERVIEW_STAGES.has(newStage))  setPrompt({ type: 'interview' })
     else if (newStage === 'Offer')   setPrompt({ type: 'offer' })
     else if (newStage === 'Joining') setPrompt({ type: 'joining' })
     else onRefresh()

@@ -6,13 +6,15 @@ export const NOTICE_PERIODS = [
   'Immediate', '15 days', '30 days', '45 days', '60 days', '90 days', 'Serving notice',
 ]
 
-export const STAGES = ['CV', 'L1', 'L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining']
+export const STAGES = ['CV', 'Pre-L1 Assessment', 'L1', 'Post-L1 Assessment', 'L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining']
 
 export const STAGE_STATUS_MAP = {
   'CV': [
     'Internal Review', 'Processed - FB Pending', 'Shortlisted', 'Hold', 'No Response',
     'Internal Duplicate', 'Client Duplicate', 'Internal Reject', 'Reject', 'Hold — Closed', 'No Response — Closed',
   ],
+  'Pre-L1 Assessment': ['Scheduled', 'Cleared', 'Reject'],
+  'Post-L1 Assessment': ['Scheduled', 'Cleared', 'Reject'],
   'L1': [
     'Scheduled', 'Shortlisted', 'FB Pending', 'No Show', 'Schedule Pending', 'Hold',
     'Reject', 'No Show — Closed', 'Hold — Closed',
@@ -47,7 +49,7 @@ export const STAGE_STATUS_MAP = {
 // Tab placement — driven solely by mandate_candidates.status
 export const ACTIVE_STATUSES = [
   'Internal Review', 'Processed - FB Pending', 'Shortlisted', 'Hold', 'No Response',
-  'Scheduled', 'Schedule Pending', 'No Show',
+  'Scheduled', 'Cleared', 'Schedule Pending', 'No Show',
   'Offer Released', 'Offer Accepted',
   'Yet to Join',
 ]
@@ -64,6 +66,9 @@ export const PLACED_STATUSES = ['Joined', 'JYTR', 'Invoice Raised']
 export const PASSING_YEARS = Array.from({ length: 2025 - 1985 + 1 }, (_, i) => 2025 - i)
 
 export function getNextStageOptions(currentStage) {
-  if (currentStage === 'CV') return ['L1']
-  return STAGES.filter((s) => s !== currentStage)
+  if (currentStage === 'CV') return ['Pre-L1 Assessment', 'L1']
+  if (currentStage === 'Pre-L1 Assessment') return ['L1']
+  if (currentStage === 'L1') return ['Post-L1 Assessment', 'L2', 'L3', 'Client Onsite', 'HR', 'Offer']
+  if (currentStage === 'Post-L1 Assessment') return ['L2', 'L3', 'Client Onsite', 'HR', 'Offer']
+  return STAGES.filter((s) => s !== currentStage && s !== 'Pre-L1 Assessment' && s !== 'Post-L1 Assessment')
 }

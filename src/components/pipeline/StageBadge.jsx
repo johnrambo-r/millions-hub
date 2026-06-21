@@ -1,6 +1,8 @@
 const STAGE_STYLES = {
-  'CV':            'bg-gray-100 text-gray-700',
-  'L1':            'bg-indigo-50 text-indigo-700',
+  'CV':                  'bg-gray-100 text-gray-700',
+  'Pre-L1 Assessment':   'bg-slate-100 text-slate-600',
+  'Post-L1 Assessment':  'bg-slate-100 text-slate-600',
+  'L1':                  'bg-indigo-50 text-indigo-700',
   'L2':            'bg-indigo-100 text-indigo-800',
   'L3':            'bg-violet-100 text-violet-800',
   'Client Onsite': 'bg-purple-100 text-purple-800',
@@ -25,6 +27,7 @@ const STATUS_STYLES = {
   'Hold':             'bg-yellow-50 text-yellow-700',
   'No Response':      'bg-gray-50 text-gray-600',
   'Scheduled':        'bg-indigo-50 text-indigo-700',
+  'Cleared':          'bg-green-50 text-green-700',
   'Schedule Pending': 'bg-sky-50 text-sky-700',
   'No Show':          'bg-orange-50 text-orange-700',
   'Offer Released':   'bg-blue-50 text-blue-700',

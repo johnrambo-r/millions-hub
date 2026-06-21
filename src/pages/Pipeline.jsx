@@ -49,7 +49,7 @@ const CANDIDATE_FIELDS = `
 
 const MC_SELECT = `
   id, candidate_id, stage, status, applicant_id, status_changed_at, linked_by, linked_at,
-  interview_date, interview_time, date_of_joining, mandate_id,
+  interview_date, interview_time, date_of_joining, assessment_date, mandate_id,
   billing_value_approx,
   linked_by_profile:profiles!linked_by(id, name),
   candidates(${CANDIDATE_FIELDS}),
@@ -215,7 +215,9 @@ function NewMCRow({ row, onSelect, onRefresh }) {
       await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
     }
 
-    if (INTERVIEW_STAGES.has(newStage)) {
+    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
+      setPrompt({ type: 'assessment' })
+    } else if (INTERVIEW_STAGES.has(newStage)) {
       setPrompt({ type: 'interview' })
     } else if (newStage === 'Offer') {
       setPrompt({ type: 'offer' })
@@ -445,7 +447,9 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
       await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
     }
 
-    if (INTERVIEW_STAGES.has(newStage)) {
+    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
+      setPrompt({ type: 'assessment' })
+    } else if (INTERVIEW_STAGES.has(newStage)) {
       setPrompt({ type: 'interview' })
     } else if (newStage === 'Offer') {
       setPrompt({ type: 'offer' })
@@ -687,7 +691,9 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
       await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
     }
 
-    if (INTERVIEW_STAGES.has(newStage)) {
+    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
+      setPrompt({ type: 'assessment' })
+    } else if (INTERVIEW_STAGES.has(newStage)) {
       setPrompt({ type: 'interview' })
     } else if (newStage === 'Offer') {
       setPrompt({ type: 'offer' })
