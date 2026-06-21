@@ -92,7 +92,6 @@ function InviteModal({ onClose, onInvited, currentUserId }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
-          'apiKey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({ name: name.trim(), email: email.trim(), role }),
       }
