@@ -6,10 +6,6 @@ const DAY_MS = 86400000
 const STAGE_ORDER = ['CV', 'L1', 'L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining']
 const INTERVIEW_STAGES = ['L1', 'L2', 'L3', 'Client Onsite', 'HR']
 const PIPELINE_STAGES = ['L2', 'L3', 'Client Onsite', 'HR']
-const FUNNEL_LABELS = [
-  ['CV', 'CV'], ['L1', 'L1'], ['L2', 'L2'], ['L3', 'L3'],
-  ['Client Onsite', 'Onsite'], ['HR', 'HR'], ['Offer', 'Offer'], ['Joining', 'Joining'],
-]
 const AT_RISK_DAYS = 14
 
 const MC_KPI_SELECT = `
@@ -84,11 +80,6 @@ export function useKpiData({ period, role, userId }) {
       const irValue = mcs.reduce(
         (sum, mc) => (mc.status === 'Invoice Raised' ? sum + Number(mc.billing_value_approx || 0) : sum), 0
       )
-
-      // Funnel conversion
-      const funnelStages = FUNNEL_LABELS.map(([stage, label]) => ({
-        stage, label, count: mcs.filter((mc) => mc.stage === stage).length,
-      }))
 
       // Per-recruiter stats
       const recruiterMap = new Map()
@@ -168,7 +159,7 @@ export function useKpiData({ period, role, userId }) {
         data: {
           activeMandates, totalInPipeline, interviewsThisPeriod, offersThisPeriod,
           placementsThisPeriod, scoresValue, irValue,
-          funnelStages, recruiterStats, revenueByClient,
+          recruiterStats, revenueByClient,
           atRiskMandates, atRiskCandidates,
         },
       })

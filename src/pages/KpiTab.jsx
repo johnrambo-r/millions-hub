@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
 import { useKpiData } from '../hooks/useKpiData'
 
 function formatMoney(val) {
@@ -86,29 +87,146 @@ function HeadlineStrip({ data }) {
   )
 }
 
-function FunnelSection({ funnelStages }) {
+// ── Funnel Ratios ────────────────────────────────────────────────────────────
+
+function SelectFilter({ value, onChange, placeholder, children }) {
   return (
-    <div className="px-6">
-      <SectionHeader>Funnel</SectionHeader>
-      <div className="px-6 py-4 bg-white rounded-xl border border-[#F0F0F4] flex items-stretch overflow-x-auto">
-        {funnelStages.map((s, i) => {
-          const prev = funnelStages[i - 1]
-          const rate = prev && prev.count > 0 ? Math.round((s.count / prev.count) * 100) : null
-          return (
-            <div key={s.stage} className="flex items-center">
-              {i > 0 && <span className="text-[#D9D9E3] mx-3">→</span>}
-              <div className="flex flex-col items-center min-w-[64px]">
-                <span className="text-xs text-[#999]">{s.label}</span>
-                <span className="text-xl font-bold text-[#0F0F12] tabular-nums">{s.count}</span>
-                <span className="text-xs text-[#999]">{rate != null ? `↓ ${rate}%` : ' '}</span>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-8 rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition min-w-[130px]"
+    >
+      <option value="">{placeholder}</option>
+      {children}
+    </select>
+  )
+}
+
+function funnelPeriodStart(period) {
+  const now = new Date()
+  if (period === 'month') return new Date(now.getFullYear(), now.getMonth(), 1)
+  if (period === 'quarter') return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
+  if (period === 'year') return new Date(now.getFullYear(), 0, 1)
+  return null
+}
+
+function fmtRatio(num, denom) {
+  if (!denom || denom < 5) return '—'
+  return Math.round((num / denom) * 100) + '%'
+}
+
+function RatioCard({ label, num, denom }) {
+  return (
+    <div className="bg-white rounded-xl border border-[#F0F0F4] p-4">
+      <p className="text-xs text-[#999] mb-1.5">{label}</p>
+      <p className="text-2xl font-medium text-[#0F0F12] tabular-nums mb-1">{fmtRatio(num, denom)}</p>
+      <p className="text-xs text-[#999]">{num} of {denom}</p>
     </div>
   )
 }
+
+function FunnelRatiosSection() {
+  const [funnelPeriod, setFunnelPeriod] = useState('month')
+  const [recruiterFilter, setRecruiterFilter] = useState('')
+  const [mandateFilter, setMandateFilter] = useState('')
+  const [clientFilter, setClientFilter] = useState('')
+
+  const [recruiters, setRecruiters] = useState([])
+  const [mandates, setMandates] = useState([])
+  const [clients, setClients] = useState([])
+
+  const [counts, setCounts] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from('profiles').select('id, name').eq('active', true).order('name'),
+      supabase.from('mandates').select('id, title, job_id').order('title'),
+      supabase.from('clients').select('id, name').order('name'),
+    ]).then(([{ data: pData }, { data: mData }, { data: cData }]) => {
+      setRecruiters(pData ?? [])
+      setMandates(mData ?? [])
+      setClients(cData ?? [])
+    })
+  }, [])
+
+  useEffect(() => {
+    setLoading(true)
+    const start = funnelPeriodStart(funnelPeriod)
+    supabase
+      .rpc('get_funnel_ratios', {
+        p_recruiter_id: recruiterFilter || null,
+        p_mandate_id:   mandateFilter   || null,
+        p_client_id:    clientFilter    || null,
+        p_period_start: start ? start.toISOString() : null,
+        p_period_end:   null,
+      })
+      .then(({ data, error }) => {
+        if (!error) setCounts(data?.[0] ?? null)
+        setLoading(false)
+      })
+  }, [funnelPeriod, recruiterFilter, mandateFilter, clientFilter])
+
+  const total   = counts?.total_submissions ?? 0
+  const l1      = counts?.reached_l1       ?? 0
+  const l2      = counts?.reached_l2       ?? 0
+  const offer   = counts?.reached_offer    ?? 0
+  const joining = counts?.reached_joining  ?? 0
+
+  return (
+    <div className="px-6">
+      <SectionHeader>Funnel Ratios</SectionHeader>
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {PERIODS.map(({ id, label }) => (
+          <button
+            key={id}
+            onClick={() => setFunnelPeriod(id)}
+            className={`h-7 px-3 rounded-full text-xs font-medium transition ${
+              funnelPeriod === id ? 'bg-[#5E6AD2] text-white' : 'bg-[#F0F0F4] text-[#666] hover:bg-[#E8E8EE]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="w-px h-4 bg-[#E8E8EE]" />
+        <SelectFilter value={recruiterFilter} onChange={setRecruiterFilter} placeholder="All recruiters">
+          {recruiters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </SelectFilter>
+        <SelectFilter value={mandateFilter} onChange={setMandateFilter} placeholder="All mandates">
+          {mandates.map((m) => (
+            <option key={m.id} value={m.id}>{m.title}{m.job_id ? ` · ${m.job_id}` : ''}</option>
+          ))}
+        </SelectFilter>
+        <SelectFilter value={clientFilter} onChange={setClientFilter} placeholder="All clients">
+          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </SelectFilter>
+      </div>
+
+      {loading ? (
+        <div className="py-8 text-center text-sm text-[#999]">Loading…</div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between px-5 py-4 rounded-xl border border-[#F0F0F4] bg-white">
+            <div>
+              <p className="text-xs text-[#999] mb-1">CV → Joining (end-to-end)</p>
+              <p className="text-3xl font-medium text-[#0F0F12] tabular-nums">{fmtRatio(joining, total)}</p>
+            </div>
+            <p className="text-sm text-[#999]">{joining} of {total} submissions this period</p>
+          </div>
+          <div className="grid grid-cols-4 gap-3">
+            <RatioCard label="Submission → L1" num={l1}      denom={total} />
+            <RatioCard label="L1 → L2"          num={l2}      denom={l1}    />
+            <RatioCard label="L1 → Offer"        num={offer}   denom={l1}    />
+            <RatioCard label="Offer → Joining"  num={joining} denom={offer} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Recruiter Performance ────────────────────────────────────────────────────
 
 function RecruiterTable({ recruiterStats }) {
   const totals = recruiterStats.reduce(
@@ -278,7 +396,7 @@ export default function KpiTab({ role, userId }) {
 
       <div className="mb-8"><HeadlineStrip data={data} /></div>
 
-      <div className="mb-8"><FunnelSection funnelStages={data.funnelStages} /></div>
+      <div className="mb-8"><FunnelRatiosSection /></div>
 
       {role !== 'recruiter' && (
         <div className="mb-8"><RecruiterTable recruiterStats={data.recruiterStats} /></div>
