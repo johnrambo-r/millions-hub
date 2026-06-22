@@ -132,7 +132,10 @@ function LinkMandateModal({ candidateId, linkedMandateIds, userId, onClose, onLi
     const applicantId = await generateApplicantId()
     const { error } = await supabase
       .from('mandate_candidates')
-      .insert({ mandate_id: mandate.id, candidate_id: candidateId, linked_by: userId, applicant_id: applicantId })
+      .insert({
+        mandate_id: mandate.id, candidate_id: candidateId, linked_by: userId, applicant_id: applicantId,
+        stage: 'CV', status: 'Internal Review', status_changed_at: new Date().toISOString(),
+      })
     setLinking(null)
     if (error) setError(error.message)
     else onLinked()
