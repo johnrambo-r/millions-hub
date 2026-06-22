@@ -97,28 +97,34 @@ function CloseIcon() {
 const fldCls = 'h-9 w-full rounded-lg border border-[#F0F0F4] bg-white px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
 function LinkMandateModal({ candidateId, linkedMandateIds, userId, onClose, onLinked }) {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
-  const [searching, setSearching] = useState(false)
+  const [clients, setClients] = useState([])
+  const [clientFilter, setClientFilter] = useState('')
+  const [mandates, setMandates] = useState([])
+  const [loadingMandates, setLoadingMandates] = useState(true)
   const [linking, setLinking] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!query.trim()) { setResults([]); return }
-    const t = setTimeout(async () => {
-      setSearching(true)
-      const { data, error } = await supabase
-        .from('mandates')
-        .select('id, title, clients(id, name)')
-        .eq('status', 'active')
-        .ilike('title', `%${query.trim()}%`)
-        .limit(20)
-      setSearching(false)
-      if (error) setError(error.message)
-      else setResults(data ?? [])
-    }, 300)
-    return () => clearTimeout(t)
-  }, [query])
+    supabase
+      .from('clients')
+      .select('id, name')
+      .order('name')
+      .then(({ data }) => setClients(data ?? []))
+  }, [])
+
+  useEffect(() => {
+    setLoadingMandates(true)
+    let query = supabase
+      .from('mandates')
+      .select('id, title, job_id, clients(id, name)')
+      .eq('status', 'active')
+      .order('title')
+    if (clientFilter) query = query.eq('client_id', clientFilter)
+    query.then(({ data }) => {
+      setMandates(data ?? [])
+      setLoadingMandates(false)
+    })
+  }, [clientFilter])
 
   async function handleLink(mandate) {
     setLinking(mandate.id)
@@ -142,27 +148,31 @@ function LinkMandateModal({ candidateId, linkedMandateIds, userId, onClose, onLi
           </button>
         </div>
         <div className="p-5 flex flex-col gap-3 overflow-hidden">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setError('') }}
-            placeholder="Search active mandates by title…"
+          <select
+            value={clientFilter}
+            onChange={(e) => { setClientFilter(e.target.value); setError('') }}
             className={fldCls}
             autoFocus
-          />
+          >
+            <option value="">All clients</option>
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
           {error && <p className="text-xs text-[#D93025]">{error}</p>}
           <div className="space-y-2 overflow-y-auto max-h-64">
-            {searching ? (
-              <p className="text-sm text-[#999] py-6 text-center">Searching…</p>
-            ) : query.trim() && results.length === 0 ? (
+            {loadingMandates ? (
+              <p className="text-sm text-[#999] py-6 text-center">Loading…</p>
+            ) : mandates.length === 0 ? (
               <p className="text-sm text-[#999] py-6 text-center">No active mandates found</p>
             ) : (
-              results.map((m) => {
+              mandates.map((m) => {
                 const alreadyLinked = linkedMandateIds.has(m.id)
                 return (
                   <div key={m.id} className="flex items-center justify-between rounded-lg border border-[#F0F0F4] px-3 py-2.5">
                     <div className="min-w-0 pr-3">
-                      <p className="text-sm font-medium text-[#0F0F12] truncate">{m.title}</p>
+                      <p className="text-sm font-medium text-[#0F0F12] truncate">
+                        {m.title}
+                        {m.job_id && <span className="font-mono text-xs text-[#999] ml-1.5">{m.job_id}</span>}
+                      </p>
                       <p className="text-xs text-[#999] mt-0.5">{m.clients?.name}</p>
                     </div>
                     {alreadyLinked ? (
@@ -1092,7 +1102,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
             /* ── Read-only detail grid ────────────────────────────────── */
             <>
               <dl className="grid grid-cols-2 gap-x-8 gap-y-5">
-                <Field label="Client">{candidate?.clients?.name}</Field>
                 <Field label="Recruiter">{candidate?.profiles?.name}</Field>
                 <Field label="Email">{candidate?.email}</Field>
                 <Field label="Phone">{candidate?.phone}</Field>
