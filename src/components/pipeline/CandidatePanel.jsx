@@ -634,6 +634,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       ? supabase.storage.from('resumes').getPublicUrl(candidate.resume_url).data.publicUrl
       : null
 
+  const isPdf = resumeUrl ? /\.pdf(\?|$)/i.test(resumeUrl) : false
+
   return (
     <>
       {/* Backdrop */}
@@ -1181,21 +1183,29 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
             </>
           )}
 
-          {/* Resume link — shown whenever a valid resume URL can be resolved */}
+          {/* Resume actions — shown whenever a valid resume URL can be resolved */}
           {resumeUrl && (
             <div>
-              <a
-                href={resumeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => window.open(resumeUrl, '_blank', 'noopener,noreferrer')}
                 className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-[#5E6AD2] text-sm font-medium text-[#5E6AD2] hover:bg-[#5E6AD2]/5 transition"
               >
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-                  <path d="M3 12V4a1 1 0 011-1h5l3 3v6a1 1 0 01-1 1H4a1 1 0 01-1-1z" />
-                  <path d="M9 3v3h3M6 9h4" strokeLinecap="round" />
+                  {isPdf ? (
+                    <>
+                      <path d="M3 12V4a1 1 0 011-1h5l3 3v6a1 1 0 01-1 1H4a1 1 0 01-1-1z" />
+                      <path d="M9 3v3h3M5 9.5h1.5a1 1 0 000-2H5v4" strokeLinecap="round" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M3 12V4a1 1 0 011-1h5l3 3v6a1 1 0 01-1 1H4a1 1 0 01-1-1z" />
+                      <path d="M9 3v3h3M6 9h4" strokeLinecap="round" />
+                    </>
+                  )}
                 </svg>
-                View Resume
-              </a>
+                Preview
+              </button>
             </div>
           )}
 

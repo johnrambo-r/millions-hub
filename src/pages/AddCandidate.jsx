@@ -36,7 +36,7 @@ const INITIAL = {
   source: '', comments: '',
 }
 
-function validate(f) {
+function validate(f, resumeFile) {
   const e = {}
   if (!f.name.trim())               e.name             = 'Required'
   if (!f.email.trim())              e.email            = 'Required'
@@ -57,6 +57,7 @@ function validate(f) {
   if (!f.source)                    e.source           = 'Required'
   if (f.emp_mode === 'Contract' && !f.payroll_company.trim())
                                     e.payroll_company  = 'Required for contract'
+  if (!resumeFile)                  e.resume           = 'Resume is required'
   return e
 }
 
@@ -147,7 +148,7 @@ export default function AddCandidate() {
   }
 
   async function submitCandidate(force = false) {
-    const errs = validate(form)
+    const errs = validate(form, resumeFile)
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
       setTimeout(() => {
@@ -418,11 +419,28 @@ export default function AddCandidate() {
             <FormField label="Comments" error={errors.comments} className="col-span-2">
               <textarea value={form.comments} onChange={(e) => setField('comments', e.target.value)} rows={3} placeholder="Any notes about the candidate…" className={`${inputCls(errors.comments)} h-auto py-2 resize-none`} />
             </FormField>
-            <FormField label="Resume" className="col-span-2">
-              <input key={fileKey} ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={(e) => setResumeFile(e.target.files[0] ?? null)} />
+            <FormField label="Resume" required error={errors.resume} className="col-span-2">
+              <input
+                key={fileKey}
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx"
+                className="hidden"
+                onChange={(e) => {
+                  setResumeFile(e.target.files[0] ?? null)
+                  setErrors((p) => ({ ...p, resume: undefined }))
+                }}
+              />
               <div className="flex items-center gap-3 h-9">
-                <button type="button" onClick={() => fileInputRef.current?.click()}
-                  className="h-9 px-3 rounded-lg border border-[#F0F0F4] flex items-center gap-2 text-sm text-[#666] hover:border-[#5E6AD2] hover:text-[#5E6AD2] transition shrink-0">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`h-9 px-3 rounded-lg border flex items-center gap-2 text-sm transition shrink-0 ${
+                    errors.resume
+                      ? 'border-[#D93025] text-[#D93025] hover:border-[#D93025] hover:text-[#D93025]'
+                      : 'border-[#F0F0F4] text-[#666] hover:border-[#5E6AD2] hover:text-[#5E6AD2]'
+                  }`}
+                >
                   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
                     <path d="M3 12V4a1 1 0 011-1h5l3 3v6a1 1 0 01-1 1H4a1 1 0 01-1-1z" />
                     <path d="M9 3v3h3M6 9h4M8 7v4" strokeLinecap="round" />
