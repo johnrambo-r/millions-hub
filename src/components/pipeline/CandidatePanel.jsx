@@ -1204,7 +1204,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                     </>
                   )}
                 </svg>
-                Preview
+                View Resume
               </button>
             </div>
           )}
