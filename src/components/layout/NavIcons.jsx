@@ -67,6 +67,15 @@ export function IconMandates({ className }) {
   )
 }
 
+export function IconSearch({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="8.5" cy="8.5" r="5.5" />
+      <path d="M15 15l-3-3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function IconReports({ className }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">

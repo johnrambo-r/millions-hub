@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   IconDashboard, IconPipeline, IconAddCandidate, IconClients,
-  IconSettings, IconUsers, IconMandates,
+  IconSettings, IconUsers, IconMandates, IconSearch,
 } from './NavIcons'
 import useRole from '../../hooks/useRole'
 
@@ -68,7 +68,7 @@ function Avatar({ name }) {
   )
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onSearchOpen }) {
   const { role, profile, loading } = useRole()
   const nav = loading ? [] : getNav(role)
 
@@ -88,6 +88,15 @@ export default function Sidebar() {
           <NavIcon key={item.to} {...item} />
         ))}
       </nav>
+
+      {/* Search button */}
+      <button
+        onClick={onSearchOpen}
+        title="Search (⌘K)"
+        className="w-9 h-9 flex items-center justify-center rounded-lg transition-colors text-[#555] hover:text-[#888] hover:bg-[#1A1A20] mb-1"
+      >
+        <IconSearch className="w-5 h-5" />
+      </button>
 
       {/* User avatar */}
       <Avatar name={profile?.name} />
