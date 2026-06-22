@@ -511,7 +511,11 @@ function ProjectionSection() {
         {PROJ_TABS.map(({ id, label }) => (
           <button
             key={id}
-            onClick={() => setProjTab(id)}
+            onClick={() => {
+              setProjTab(id)
+              setProjLoading(true)
+              setProjData(null)
+            }}
             className={`h-7 px-3 rounded-full text-xs font-medium transition ${
               projTab === id
                 ? 'bg-[#5E6AD2] text-white'
@@ -597,7 +601,7 @@ function ProjectionSection() {
       )}
 
       {/* By Recruiter / By SPOC — table with months as columns */}
-      {!projLoading && isGrouped && projData && (
+      {!projLoading && isGrouped && projData && !Array.isArray(projData) && (
         projData.people.length === 0 ? (
           <p className="py-6 text-center text-sm text-[#999]">No data.</p>
         ) : (
