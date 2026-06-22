@@ -378,6 +378,271 @@ function AtRiskSection({ atRiskMandates, atRiskCandidates }) {
   )
 }
 
+// ── Projection ──────────────────────────────────────────────────────────────
+
+function fmtMonth(dateStr) {
+  if (!dateStr) return ''
+  const [y, m] = dateStr.split('-')
+  const mon = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'short' })
+  return `${mon} '${y.slice(2)}`
+}
+
+function parseProjectionRows(rows, tab) {
+  if (!rows?.length) {
+    return tab === 'consolidated' ? [] : { monthLabels: [], people: [] }
+  }
+  if (tab === 'consolidated') {
+    return rows
+      .map((r) => ({
+        label:          fmtMonth(r.month_start),
+        month_index:    Number(r.month_index),
+        pipeline_value: Number(r.pipeline_value),
+        pipeline_count: Number(r.pipeline_count),
+        actual_revenue: Number(r.actual_revenue),
+        actual_count:   Number(r.actual_count),
+      }))
+      .sort((a, b) => a.month_index - b.month_index)
+  }
+
+  const byIdx = {}
+  for (const r of rows) {
+    const i = Number(r.month_index)
+    if (!(i in byIdx)) byIdx[i] = fmtMonth(r.month_start)
+  }
+  const monthLabels = Array.from({ length: 6 }, (_, i) => byIdx[i] ?? '')
+
+  const peopleMap = new Map()
+  for (const r of rows) {
+    const key = r.group_id ?? '__null__'
+    if (!peopleMap.has(key)) {
+      peopleMap.set(key, {
+        group_id:   r.group_id,
+        group_name: r.group_name ?? '—',
+        months: Array.from({ length: 6 }, () => ({
+          pipeline_value: 0, pipeline_count: 0, actual_revenue: 0, actual_count: 0,
+        })),
+      })
+    }
+    const idx = Number(r.month_index)
+    if (idx >= 0 && idx < 6) {
+      peopleMap.get(key).months[idx] = {
+        pipeline_value: Number(r.pipeline_value),
+        pipeline_count: Number(r.pipeline_count),
+        actual_revenue: Number(r.actual_revenue),
+        actual_count:   Number(r.actual_count),
+      }
+    }
+  }
+
+  return {
+    monthLabels,
+    people: Array.from(peopleMap.values()).sort((a, b) =>
+      (a.group_name ?? '').localeCompare(b.group_name ?? '')
+    ),
+  }
+}
+
+function ProjCell({ m, isCurrent }) {
+  const showActual   = isCurrent && (m.actual_revenue > 0 || m.actual_count > 0)
+  const showPipeline = m.pipeline_value > 0 || m.pipeline_count > 0
+
+  if (!showActual && !showPipeline) {
+    return <span className="text-sm text-[#bbb]">—</span>
+  }
+  return (
+    <div className="space-y-2">
+      {showActual && (
+        <div>
+          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#aaa] mb-0.5">Actual</p>
+          <p className="text-sm font-semibold text-[#0F0F12] tabular-nums leading-none">
+            {formatMoney(m.actual_revenue)}
+          </p>
+          <p className="text-xs text-[#999] mt-0.5">
+            {m.actual_count} deal{m.actual_count !== 1 ? 's' : ''}
+          </p>
+        </div>
+      )}
+      {showPipeline && (
+        <div>
+          {showActual && (
+            <p className="text-[9px] font-semibold uppercase tracking-wider text-[#aaa] mb-0.5">Pipeline</p>
+          )}
+          <p className="text-sm font-medium text-[#0F0F12] tabular-nums leading-none">
+            {formatMoney(m.pipeline_value)}
+          </p>
+          <p className="text-xs text-[#999] mt-0.5">
+            {m.pipeline_count} deal{m.pipeline_count !== 1 ? 's' : ''}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const PROJ_TABS = [
+  { id: 'consolidated', label: 'Consolidated' },
+  { id: 'recruiter',    label: 'By Recruiter' },
+  { id: 'spoc',         label: 'By SPOC' },
+]
+
+function ProjectionSection() {
+  const [projTab, setProjTab] = useState('consolidated')
+  const [projData, setProjData] = useState(null)
+  const [projLoading, setProjLoading] = useState(false)
+
+  useEffect(() => {
+    setProjLoading(true)
+    setProjData(null)
+    supabase
+      .rpc('get_projection', { p_group_by: projTab })
+      .then(({ data: rows, error }) => {
+        if (!error) setProjData(parseProjectionRows(rows, projTab))
+        setProjLoading(false)
+      })
+  }, [projTab])
+
+  const isGrouped = projTab === 'recruiter' || projTab === 'spoc'
+
+  return (
+    <div className="px-6">
+      <SectionHeader>Revenue Projection</SectionHeader>
+
+      <div className="flex items-center gap-1.5 mb-4">
+        {PROJ_TABS.map(({ id, label }) => (
+          <button
+            key={id}
+            onClick={() => setProjTab(id)}
+            className={`h-7 px-3 rounded-full text-xs font-medium transition ${
+              projTab === id
+                ? 'bg-[#5E6AD2] text-white'
+                : 'bg-[#F0F0F4] text-[#666] hover:bg-[#E8E8EE]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {projLoading && (
+        <div className="py-8 text-center text-sm text-[#999]">Loading…</div>
+      )}
+
+      {/* Consolidated — 6 month cards */}
+      {!projLoading && !isGrouped && Array.isArray(projData) && (
+        projData.length === 0 ? (
+          <p className="py-6 text-center text-sm text-[#999]">No billing data in the 6-month window.</p>
+        ) : (
+          <div className="grid grid-cols-6 gap-3">
+            {projData.map((m) => (
+              <div
+                key={m.month_index}
+                className={`rounded-xl border p-4 ${
+                  m.month_index === 0
+                    ? 'border-[#5E6AD2]/30 bg-[#5E6AD2]/[0.03]'
+                    : 'border-[#F0F0F4] bg-white'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 mb-3">
+                  <span className="text-xs font-semibold text-[#555]">{m.label}</span>
+                  {m.month_index === 0 && (
+                    <span className="text-[9px] font-semibold bg-[#5E6AD2]/15 text-[#5E6AD2] rounded-full px-1.5 py-0.5 uppercase tracking-wider">
+                      Now
+                    </span>
+                  )}
+                </div>
+
+                {m.month_index === 0 ? (
+                  <>
+                    <div className="mb-3 pb-3 border-b border-[#EBEBF0]">
+                      <p className="text-[9px] font-semibold uppercase tracking-wider text-[#aaa] mb-1">
+                        Actual Revenue
+                      </p>
+                      <p className="text-base font-semibold text-[#0F0F12] tabular-nums leading-none">
+                        {formatMoney(m.actual_revenue)}
+                      </p>
+                      <p className="text-xs text-[#999] mt-1">
+                        {m.actual_count} deal{m.actual_count !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-semibold uppercase tracking-wider text-[#aaa] mb-1">
+                        Remaining Pipeline
+                      </p>
+                      <p className="text-base font-semibold text-[#0F0F12] tabular-nums leading-none">
+                        {formatMoney(m.pipeline_value)}
+                      </p>
+                      <p className="text-xs text-[#999] mt-1">
+                        {m.pipeline_count} deal{m.pipeline_count !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  m.pipeline_value === 0 && m.pipeline_count === 0 ? (
+                    <p className="text-sm text-[#bbb]">—</p>
+                  ) : (
+                    <>
+                      <p className="text-base font-semibold text-[#0F0F12] tabular-nums leading-none">
+                        {formatMoney(m.pipeline_value)}
+                      </p>
+                      <p className="text-xs text-[#999] mt-1">
+                        {m.pipeline_count} deal{m.pipeline_count !== 1 ? 's' : ''}
+                      </p>
+                    </>
+                  )
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {/* By Recruiter / By SPOC — table with months as columns */}
+      {!projLoading && isGrouped && projData && (
+        projData.people.length === 0 ? (
+          <p className="py-6 text-center text-sm text-[#999]">No data.</p>
+        ) : (
+          <div className="bg-white rounded-xl border border-[#F0F0F4] overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+                  <TH>{projTab === 'recruiter' ? 'Recruiter' : 'SPOC'}</TH>
+                  {projData.monthLabels.map((label, i) => (
+                    <TH key={i}>
+                      <span className={i === 0 ? 'text-[#5E6AD2]' : ''}>{label}</span>
+                      {i === 0 && (
+                        <span className="ml-1.5 text-[9px] font-semibold bg-[#5E6AD2]/15 text-[#5E6AD2] rounded-full px-1.5 py-0.5 uppercase tracking-wider align-middle">
+                          now
+                        </span>
+                      )}
+                    </TH>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {projData.people.map((person) => (
+                  <tr
+                    key={person.group_id ?? person.group_name}
+                    className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors"
+                  >
+                    <TD className="font-medium text-[#0F0F12] whitespace-nowrap">{person.group_name}</TD>
+                    {person.months.map((m, i) => (
+                      <TD key={i} className="align-top">
+                        <ProjCell m={m} isCurrent={i === 0} />
+                      </TD>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
+// ── KpiTab root ──────────────────────────────────────────────────────────────
+
 export default function KpiTab({ role, userId }) {
   const [period, setPeriod] = useState('month')
   const data = useKpiData({ period, role, userId })
@@ -397,6 +662,8 @@ export default function KpiTab({ role, userId }) {
       <div className="mb-8"><HeadlineStrip data={data} /></div>
 
       <div className="mb-8"><FunnelRatiosSection /></div>
+
+      <div className="mb-8"><ProjectionSection /></div>
 
       {role !== 'recruiter' && (
         <div className="mb-8"><RecruiterTable recruiterStats={data.recruiterStats} /></div>
