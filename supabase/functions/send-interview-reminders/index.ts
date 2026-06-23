@@ -65,10 +65,11 @@ Deno.serve(async () => {
 
       if (!mc?.interview_date || !mc?.interview_time) continue;
 
-      // Compute fire time in IST
-      const interviewTs = new Date(
-        `${mc.interview_date}T${mc.interview_time.length === 5 ? mc.interview_time : mc.interview_time + ":00"}${IST_OFFSET}`,
-      );
+      // Compute fire time in IST.
+      // interview_time can be "HH:MM" or "HH:MM:SS" from the database.
+      // Normalize to "HH:MM:00" so the ISO string is always valid.
+      const timeNorm = `${mc.interview_time.substring(0, 5)}:00`;
+      const interviewTs = new Date(`${mc.interview_date}T${timeNorm}${IST_OFFSET}`);
       const fireTime = new Date(interviewTs.getTime() - r.lead_time_minutes * 60_000);
 
       if (fireTime > now || fireTime < windowStart) continue;
@@ -183,6 +184,7 @@ Deno.serve(async () => {
 
     // ── 4. Send messages and mark fired ─────────────────────────────────────
     let firedCount = 0;
+    const sendErrors: string[] = [];
 
     for (const item of due) {
       const baseMsg =
@@ -201,6 +203,13 @@ Deno.serve(async () => {
         recipients.push({ email: item.amEmail, text: amText });
       }
 
+      if (!recipients.length) {
+        const msg = `reminder ${item.reminderId}: no recipients (recruiterEmail=${item.recruiterEmail}, amEmail=${item.amEmail})`;
+        console.warn("[reminders]", msg);
+        sendErrors.push(msg);
+        continue;
+      }
+
       let allSent = true;
       for (const recipient of recipients) {
         const res = await fetch(CLIQ_BOT_MESSAGE_URL, {
@@ -214,11 +223,9 @@ Deno.serve(async () => {
 
         if (!res.ok) {
           const body = await res.text();
-          console.error(
-            `[reminders] Cliq message failed for ${recipient.email}:`,
-            res.status,
-            body,
-          );
+          const msg = `Cliq POST to ${recipient.email}: HTTP ${res.status} — ${body}`;
+          console.error("[reminders]", msg);
+          sendErrors.push(msg);
           allSent = false;
         }
       }
@@ -233,7 +240,12 @@ Deno.serve(async () => {
       }
     }
 
-    return Response.json({ fired: firedCount, checked: reminders.length, due: due.length });
+    return Response.json({
+      fired: firedCount,
+      checked: reminders.length,
+      due: due.length,
+      ...(sendErrors.length ? { errors: sendErrors } : {}),
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[reminders] unexpected error:", msg);
