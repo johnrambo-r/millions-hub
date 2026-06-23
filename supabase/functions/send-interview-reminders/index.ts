@@ -218,7 +218,7 @@ Deno.serve(async () => {
             "Authorization": `Zoho-oauthtoken ${accessToken}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ text: recipient.text, user_unique_name: recipient.email }),
+          body: JSON.stringify({ text: recipient.text, userids: recipient.email }),
         });
 
         if (!res.ok) {
