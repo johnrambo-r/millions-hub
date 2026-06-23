@@ -242,6 +242,11 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   const [rescheduleTime, setRescheduleTime] = useState('')
   const [rescheduling, setRescheduling] = useState(false)
 
+  // Interview reminder scheduling
+  const [reminderMcId, setReminderMcId] = useState(null)
+  const [reminderLeadTime, setReminderLeadTime] = useState(30)
+  const [savingReminder, setSavingReminder] = useState(false)
+
   const isOpen = !!candidate
 
   useEffect(() => {
@@ -275,6 +280,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       setShowLinkModal(false)
       setEditingMcId(null)
       setReschedulingMcId(null)
+      setReminderMcId(null)
       return
     }
 
@@ -401,7 +407,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
     setMandatesLoading(true)
     supabase
       .from('mandate_candidates')
-      .select('id, mandate_id, stage, status, applicant_id, status_changed_at, linked_at, interview_date, interview_time, offered_ctc, billing_value_approx, billing_value_final, date_of_joining, offer_date, tentative_invoice_date, invoice_date, mandates(id, title, job_id, clients(id, name))')
+      .select('id, mandate_id, stage, status, applicant_id, status_changed_at, linked_at, linked_by, interview_date, interview_time, offered_ctc, billing_value_approx, billing_value_final, date_of_joining, offer_date, tentative_invoice_date, invoice_date, mandates(id, title, job_id, clients(id, name)), interview_reminders(id, lead_time_minutes, fired_at, cancelled_at, created_by)')
       .eq('candidate_id', candidateId)
       .order('linked_at', { ascending: false })
       .then(({ data, error }) => {
@@ -731,6 +737,10 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                   const interviewLine = mc.interview_date
                     ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime(mc.interview_time) : null].filter(Boolean).join(' · ')
                     : null
+                  const activeReminder = mc.interview_reminders?.find(
+                    (r) => !r.fired_at && !r.cancelled_at
+                  ) ?? null
+                  const canScheduleReminder = !!(mc.interview_date && mc.interview_time)
                   return (
                     <li key={mc.id} className="rounded-lg border border-[#F0F0F4] px-3 py-3">
                       <div className="flex items-start justify-between gap-2">
@@ -862,6 +872,38 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                                 </button>
                               </p>
                             )}
+                            {canScheduleReminder && !activeReminder && reminderMcId !== mc.id && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setReminderMcId(mc.id)
+                                  setReminderLeadTime(30)
+                                }}
+                                className="text-xs text-[#5E6AD2] hover:underline mt-0.5"
+                              >
+                                Set reminder
+                              </button>
+                            )}
+                            {activeReminder && (
+                              <p className="text-xs text-[#555] flex items-center gap-1 mt-0.5">
+                                <span className="text-[#999] mr-1">Reminder</span>
+                                {activeReminder.lead_time_minutes} min before
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    await supabase
+                                      .from('interview_reminders')
+                                      .update({ cancelled_at: new Date().toISOString() })
+                                      .eq('id', activeReminder.id)
+                                    loadLinkedMandates(candidate.id)
+                                  }}
+                                  className="text-[#999] hover:text-[#D93025] transition-colors ml-0.5"
+                                  title="Cancel reminder"
+                                >
+                                  ×
+                                </button>
+                              </p>
+                            )}
                             {mc.offered_ctc != null && (
                               <p className="text-xs text-[#555]"><span className="text-[#999] mr-1">Offered CTC</span>{formatMoney(mc.offered_ctc)}</p>
                             )}
@@ -920,6 +962,44 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                           </button>
                           <button
                             onClick={() => setReschedulingMcId(null)}
+                            className="h-7 px-2.5 rounded-lg text-xs text-[#666] border border-[#E0E0E8] hover:bg-white transition shrink-0"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                      {reminderMcId === mc.id && (
+                        <div className="mt-2 flex items-center gap-2 bg-[#FAFAFA] rounded-lg p-2.5 border border-[#F0F0F4]">
+                          <span className="text-xs text-[#666] shrink-0">Remind me</span>
+                          <select
+                            value={reminderLeadTime}
+                            onChange={(e) => setReminderLeadTime(Number(e.target.value))}
+                            className="h-7 rounded border border-[#E0E0E8] px-2 text-xs flex-1"
+                          >
+                            <option value={15}>15 min before</option>
+                            <option value={30}>30 min before</option>
+                            <option value={60}>1 hour before</option>
+                            <option value={120}>2 hours before</option>
+                          </select>
+                          <button
+                            onClick={async () => {
+                              setSavingReminder(true)
+                              await supabase.from('interview_reminders').insert({
+                                mandate_candidate_id: mc.id,
+                                lead_time_minutes: reminderLeadTime,
+                                created_by: userId,
+                              })
+                              setSavingReminder(false)
+                              setReminderMcId(null)
+                              loadLinkedMandates(candidate.id)
+                            }}
+                            disabled={savingReminder}
+                            className="h-7 px-2.5 rounded-lg text-xs font-semibold text-white bg-[#5E6AD2] hover:opacity-90 disabled:opacity-50 transition shrink-0"
+                          >
+                            {savingReminder ? '…' : 'Save'}
+                          </button>
+                          <button
+                            onClick={() => setReminderMcId(null)}
                             className="h-7 px-2.5 rounded-lg text-xs text-[#666] border border-[#E0E0E8] hover:bg-white transition shrink-0"
                           >
                             Cancel
