@@ -34,7 +34,10 @@ export default {
 
       const { data: authData, error: authError } = await ctx.supabaseAdmin.auth.admin.inviteUserByEmail(
         email.trim(),
-        { data: { name: name.trim() } },
+        {
+          data: { name: name.trim() },
+          redirectTo: "https://millions-hub.pages.dev/",
+        },
       );
 
       if (authError) {
