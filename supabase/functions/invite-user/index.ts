@@ -36,7 +36,7 @@ export default {
         email.trim(),
         {
           data: { name: name.trim() },
-          redirectTo: "https://millions-hub.pages.dev/",
+          redirectTo: "https://millions-hub.pages.dev/reset-password",
         },
       );
 
