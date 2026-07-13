@@ -15,11 +15,17 @@ const TABS = [
 ]
 
 const WIDGET_CONFIG = {
-  interviews:        { title: 'Interviews today',          badgeColor: 'indigo', badgeLabel: (c) => c.stage,                   showDays: false },
-  cvOverdue:         { title: 'CV feedback overdue',       badgeColor: 'red',    badgeLabel: () => 'Processed - FB Pending',    showDays: true  },
-  interviewOverdue:  { title: 'Interview feedback ageing', badgeColor: 'amber',  badgeLabel: (c) => c.stage,                   showDays: true  },
-  liveL2:            { title: 'Live L2+ pipeline',         badgeColor: 'green',  badgeLabel: (c) => c.stage,                   showDays: false },
+  interviews:       { title: 'Interviews today' },
+  cvOverdue:        { title: 'CV feedback overdue' },
+  interviewOverdue: { title: 'Interview feedback ageing' },
+  liveL2:           { title: 'Live L2+ pipeline' },
 }
+
+const TH = ({ children, className = '' }) => (
+  <th className={`px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap ${className}`}>
+    {children}
+  </th>
+)
 
 export default function Dashboard() {
   const profile = useProfile()
@@ -62,7 +68,7 @@ export default function Dashboard() {
         {activeTab === 'kpi' && <KpiTab role={role} userId={profile?.id} />}
 
         {activeTab === 'overview' && (
-          <div className="p-6 space-y-4 max-w-6xl">
+          <div className="p-6 space-y-4 max-w-[1400px]">
 
             {/* Metric strip — 4 columns, each card clickable */}
             <div className="grid grid-cols-4 gap-4">
@@ -97,21 +103,34 @@ export default function Dashboard() {
             </div>
 
             {/* Single full-width widget — switches based on selectedMetric */}
-            <div style={{ height: 420 }}>
+            <div style={{ height: 460 }}>
               <DashboardWidget
                 title={activeConfig.title}
                 empty={!loading && activeList.length === 0}
               >
-                {activeList.map((c) => (
-                  <CandidateRow
-                    key={c._mc_id}
-                    candidate={c}
-                    badgeLabel={activeConfig.badgeLabel(c)}
-                    badgeColor={activeConfig.badgeColor}
-                    daysOverdue={activeConfig.showDays ? c.daysOverdue : undefined}
-                    onClick={setSelectedCandidate}
-                  />
-                ))}
+                <table className="w-full min-w-[1000px] border-collapse">
+                  <thead className="sticky top-0 z-10 bg-white border-b border-[#F0F0F4]">
+                    <tr>
+                      <TH>Candidate</TH>
+                      <TH>Contact</TH>
+                      <TH>Client · Mandate</TH>
+                      <TH className="w-28">Stage</TH>
+                      <TH className="w-36">Status</TH>
+                      <TH className="w-32">Interview / DOJ</TH>
+                      <TH>Recruiter · AM</TH>
+                      <TH className="w-24">In Stage</TH>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeList.map((c) => (
+                      <CandidateRow
+                        key={c._mc_id}
+                        candidate={c}
+                        onClick={setSelectedCandidate}
+                      />
+                    ))}
+                  </tbody>
+                </table>
               </DashboardWidget>
             </div>
 

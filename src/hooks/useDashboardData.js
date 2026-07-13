@@ -26,7 +26,10 @@ function daysSince(dateStr) {
 }
 
 const MC_DASHBOARD_SELECT = `
-  id, stage, status, status_changed_at, interview_date,
+  id, applicant_id, stage, status, status_changed_at,
+  interview_date, interview_time, date_of_joining,
+  linked_by_profile:profiles!linked_by(id, name),
+  mandates(id, title, job_id, clients(id, name), am:profiles!am_id(id, name)),
   candidates(
     id, name, skill_role, total_exp, email, phone, alt_contact,
     current_location, preferred_location,
@@ -78,6 +81,11 @@ export function useDashboardData(profile) {
           status:            mc.status,
           status_changed_at: mc.status_changed_at,
           interview_date:    mc.interview_date,
+          interview_time:    mc.interview_time,
+          date_of_joining:   mc.date_of_joining,
+          applicant_id:      mc.applicant_id,
+          linked_by_profile: mc.linked_by_profile,
+          mandates:          mc.mandates,
           _mc_id:            mc.id,
         }))
 
