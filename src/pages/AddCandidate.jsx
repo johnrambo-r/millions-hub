@@ -114,7 +114,7 @@ function PostAddPromptModal({ candidateId, onAssign, onSkip }) {
 export default function AddCandidate() {
   const navigate   = useNavigate()
   const profile    = useProfile()
-  const { candidateId, regenerate } = useNextCandidateId()
+  const { candidateId, generate } = useNextCandidateId()
 
   const [form, setForm]           = useState(INITIAL)
   const [errors, setErrors]       = useState({})
@@ -173,12 +173,19 @@ export default function AddCandidate() {
     setSubmitting(true)
     setFormError('')
 
+    const newCandidateId = await generate()
+    if (!newCandidateId) {
+      setFormError('Could not generate a candidate ID. Please try again.')
+      setSubmitting(false)
+      return { success: false, reason: 'id' }
+    }
+
     const { data: { user } } = await supabase.auth.getUser()
     const recruiter_id = user.id
 
     let publicUrl = null
     if (resumeFile) {
-      const filePath = `${candidateId}/${resumeFile.name}`
+      const filePath = `${newCandidateId}/${resumeFile.name}`
       const { error: uploadError } = await supabase.storage.from('resumes').upload(filePath, resumeFile)
       if (uploadError) {
         console.warn('[AddCandidate] resume upload failed:', uploadError.message)
@@ -189,7 +196,7 @@ export default function AddCandidate() {
     }
 
     const payload = {
-      id:            candidateId,
+      id:            newCandidateId,
       recruiter_id:  recruiter_id,
       // Identity
       name:          form.name.trim(),
@@ -245,13 +252,12 @@ export default function AddCandidate() {
       return { success: false, reason: 'insert' }
     }
 
-    const addedId   = candidateId
+    const addedId   = newCandidateId
     const addedName = form.name.trim()
     setForm(INITIAL)
     setErrors({})
     setResumeFile(null)
     setFileKey((k) => k + 1)
-    await regenerate()
     setSubmitting(false)
     setPostAdd({ id: addedId, name: addedName })
     return { success: true }
@@ -281,7 +287,7 @@ export default function AddCandidate() {
           {/* ── Identity ── */}
           <FormSection title="Identity">
             <FormField label="Candidate ID">
-              <input value={candidateId || 'Generating…'} readOnly className={inputReadOnly} />
+              <input value={candidateId || 'Assigned on submit'} readOnly className={inputReadOnly} />
             </FormField>
             <FormField label="Date added">
               <input value={today} readOnly className={inputReadOnly} />
@@ -463,7 +469,7 @@ export default function AddCandidate() {
           <div className="flex justify-end pt-2">
             <button
               type="submit"
-              disabled={submitting || !candidateId}
+              disabled={submitting}
               className="h-10 px-6 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: '#5E6AD2' }}
             >

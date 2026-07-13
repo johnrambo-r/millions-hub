@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 export function useNextCandidateId() {
@@ -8,10 +8,10 @@ export function useNextCandidateId() {
     const { data, error } = await supabase.rpc('next_candidate_id')
     if (!error && data) {
       setCandidateId(data)
+      return data
     }
+    return null
   }, [])
 
-  useEffect(() => { generate() }, [generate])
-
-  return { candidateId, regenerate: generate }
+  return { candidateId, generate }
 }
