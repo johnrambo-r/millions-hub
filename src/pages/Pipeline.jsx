@@ -18,6 +18,7 @@ import {
   TALENT_POOL_STATUSES,
   PLACED_STATUSES,
   getNextStageOptions,
+  getAllStageOptions,
 } from '../lib/candidateConstants'
 import useRole from '../hooks/useRole'
 
@@ -177,6 +178,7 @@ function InStageBadge({ dateStr }) {
 
 function NewMCRow({ row, onSelect, onRefresh }) {
   const { session } = useAuth()
+  const { isFounder } = useRole()
   const [stage, setStage]   = useState(row.stage ?? '')
   const [status, setStatus] = useState(row.status ?? '')
   const [prompt, setPrompt] = useState(null)
@@ -345,7 +347,7 @@ function NewMCRow({ row, onSelect, onRefresh }) {
         <TD onClick={(e) => e.stopPropagation()}>
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
-            options={getNextStageOptions(stage)}
+            options={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
             onSelect={handleStageChange}
           />
         </TD>
@@ -423,6 +425,7 @@ function NewMCTable({ rows, loading, onSelect, onRefresh }) {
 
 function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
   const { session } = useAuth()
+  const { isFounder } = useRole()
   const [stage, setStage]   = useState(row.stage ?? '')
   const [status, setStatus] = useState(row.status ?? '')
   const [prompt, setPrompt] = useState(null)
@@ -504,7 +507,7 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
         <TD onClick={(e) => e.stopPropagation()}>
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
-            options={getNextStageOptions(stage)}
+            options={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
             onSelect={handleStageChange}
           />
         </TD>
@@ -669,6 +672,7 @@ function UnassignedTable({ rows, loading, onSelect, onAssign }) {
 
 function AllCandidateRow({ row, onSelect, onRefresh }) {
   const { session } = useAuth()
+  const { isFounder } = useRole()
   const mc = latestMC(row)
 
   const [stage, setStage]   = useState(mc?.stage ?? '')
@@ -746,7 +750,7 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
           {mc ? (
             <InlineDropdown
               badge={<StageBadge value={stage || null} />}
-              options={getNextStageOptions(stage)}
+              options={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
               onSelect={handleStageChange}
             />
           ) : (

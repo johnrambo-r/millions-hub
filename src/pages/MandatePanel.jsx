@@ -6,7 +6,7 @@ import UnsavedChangesModal from '../components/UnsavedChangesModal'
 import useRole from '../hooks/useRole'
 import { useAuth } from '../context/AuthContext'
 import {
-  STAGES, STAGE_STATUS_MAP, ACTIVE_STATUSES, PLACED_STATUSES, getNextStageOptions,
+  STAGES, STAGE_STATUS_MAP, ACTIVE_STATUSES, PLACED_STATUSES, getNextStageOptions, getAllStageOptions,
 } from '../lib/candidateConstants'
 import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineStageStatus'
 import { StageBadge, StatusBadge as CandidateStatusBadge } from '../components/pipeline/StageBadge'
@@ -497,6 +497,7 @@ function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, sel
 
 function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBulkCheckbox, isSelected, onToggleSelect, isEligible }) {
   const { session }         = useAuth()
+  const { isFounder }       = useRole()
   const [stage, setStage]   = useState(mc.stage ?? '')
   const [status, setStatus] = useState(mc.status ?? '')
   const [unlinkConfirm, setUnlinkConfirm] = useState(false)
@@ -638,7 +639,7 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
         <td className="px-4 py-3 text-sm">
           <InlineDropdown
             badge={<StageBadge value={stage || null} />}
-            options={getNextStageOptions(stage)}
+            options={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
             onSelect={handleStageChange}
             disabled={!canEdit}
           />

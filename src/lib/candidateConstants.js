@@ -72,3 +72,8 @@ export function getNextStageOptions(currentStage) {
   if (currentStage === 'Post-L1 Assessment') return ['L2', 'L3', 'Client Onsite', 'HR', 'Offer']
   return STAGES.filter((s) => s !== currentStage && s !== 'Pre-L1 Assessment' && s !== 'Post-L1 Assessment')
 }
+
+// Founders only: any stage in any direction
+export function getAllStageOptions(currentStage) {
+  return STAGES.filter((s) => s !== currentStage)
+}
