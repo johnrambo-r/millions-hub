@@ -921,7 +921,7 @@ export default function MandatePanel() {
   useEffect(() => {
     supabase
       .from('profiles').select('id, name')
-      .eq('role', 'recruiter').eq('active', true).order('name')
+      .in('role', ['recruiter', 'account_manager']).eq('active', true).order('name')
       .then(({ data }) => setRecruiterProfiles(data ?? []))
   }, [])
 

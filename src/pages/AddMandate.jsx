@@ -109,7 +109,7 @@ export default function AddMandate() {
     supabase
       .from('profiles')
       .select('id, name')
-      .eq('role', 'recruiter')
+      .in('role', ['recruiter', 'account_manager'])
       .eq('active', true)
       .order('name')
       .then(({ data }) => setRecruiters(data ?? []))
