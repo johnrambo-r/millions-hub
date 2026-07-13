@@ -7,7 +7,6 @@ import DuplicateModal from '../components/add-candidate/DuplicateModal'
 import SuccessToast from '../components/add-candidate/SuccessToast'
 import AssignMandateModal from '../components/AssignMandateModal'
 import { useProfile } from '../hooks/useProfile'
-import { useNextCandidateId } from '../hooks/useNextCandidateId'
 import { supabase } from '../lib/supabase'
 import { QUALIFICATIONS, NOTICE_PERIODS, PASSING_YEARS } from '../lib/candidateConstants'
 
@@ -114,7 +113,6 @@ function PostAddPromptModal({ candidateId, onAssign, onSkip }) {
 export default function AddCandidate() {
   const navigate   = useNavigate()
   const profile    = useProfile()
-  const { candidateId, generate } = useNextCandidateId()
 
   const [form, setForm]           = useState(INITIAL)
   const [errors, setErrors]       = useState({})
@@ -173,30 +171,10 @@ export default function AddCandidate() {
     setSubmitting(true)
     setFormError('')
 
-    const newCandidateId = await generate()
-    if (!newCandidateId) {
-      setFormError('Could not generate a candidate ID. Please try again.')
-      setSubmitting(false)
-      return { success: false, reason: 'id' }
-    }
-
     const { data: { user } } = await supabase.auth.getUser()
     const recruiter_id = user.id
 
-    let publicUrl = null
-    if (resumeFile) {
-      const filePath = `${newCandidateId}/${resumeFile.name}`
-      const { error: uploadError } = await supabase.storage.from('resumes').upload(filePath, resumeFile)
-      if (uploadError) {
-        console.warn('[AddCandidate] resume upload failed:', uploadError.message)
-      } else {
-        const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
-        publicUrl = urlData.publicUrl
-      }
-    }
-
     const payload = {
-      id:            newCandidateId,
       recruiter_id:  recruiter_id,
       // Identity
       name:          form.name.trim(),
@@ -241,15 +219,27 @@ export default function AddCandidate() {
       reason_for_looking: form.reason_for_looking.trim() || null,
       source:             form.source,
       comments:           form.comments.trim() || null,
-      resume_url:         publicUrl,
     }
 
-    const { error: insertError } = await supabase.from('candidates').insert(payload)
+    const { data: newCandidate, error: insertError } = await supabase.rpc('create_candidate', { payload })
 
-    if (insertError) {
-      setFormError(insertError.message)
+    if (insertError || !newCandidate) {
+      setFormError(insertError?.message || 'Could not save candidate. Please try again.')
       setSubmitting(false)
       return { success: false, reason: 'insert' }
+    }
+
+    const newCandidateId = newCandidate.id
+
+    if (resumeFile) {
+      const filePath = `${newCandidateId}/${resumeFile.name}`
+      const { error: uploadError } = await supabase.storage.from('resumes').upload(filePath, resumeFile)
+      if (uploadError) {
+        console.warn('[AddCandidate] resume upload failed:', uploadError.message)
+      } else {
+        const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
+        await supabase.from('candidates').update({ resume_url: urlData.publicUrl }).eq('id', newCandidateId)
+      }
     }
 
     const addedId   = newCandidateId
@@ -287,7 +277,7 @@ export default function AddCandidate() {
           {/* ── Identity ── */}
           <FormSection title="Identity">
             <FormField label="Candidate ID">
-              <input value={candidateId || 'Assigned on submit'} readOnly className={inputReadOnly} />
+              <input value="Assigned on submit" readOnly className={inputReadOnly} />
             </FormField>
             <FormField label="Date added">
               <input value={today} readOnly className={inputReadOnly} />
