@@ -7,6 +7,7 @@ import FormSection from '../components/add-candidate/FormSection'
 import FormField, { inputCls } from '../components/add-candidate/FormField'
 import { useClients } from '../hooks/useClients'
 import { supabase } from '../lib/supabase'
+import { GROQ_MODEL } from '../lib/groqConfig'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -164,7 +165,7 @@ export default function AddMandate() {
           Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: GROQ_MODEL,
           messages: [
             {
               role: 'system',
