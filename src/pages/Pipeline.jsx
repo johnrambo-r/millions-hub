@@ -25,8 +25,8 @@ import useRole from '../hooks/useRole'
 // ─── constants ──────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'pipeline',    label: 'Pipeline' },
   { id: 'active',      label: 'Active' },
+  { id: 'pipeline',    label: 'Pipeline' },
   { id: 'talent_pool', label: 'Talent Pool' },
   { id: 'placed',      label: 'Placed' },
   { id: 'unassigned',  label: 'Unassigned' },
@@ -61,7 +61,7 @@ const UNASSIGNED_SELECT = CANDIDATE_FIELDS
 
 const ALL_SELECT = `
   ${CANDIDATE_FIELDS},
-  mandate_candidates(id, candidate_id, mandate_id, applicant_id, stage, status, status_changed_at, billing_value_approx)
+  mandate_candidates(id, candidate_id, mandate_id, applicant_id, stage, status, status_changed_at, billing_value_approx, mandates(id, title, job_id, clients(id, name)))
 `
 
 const MC_TABS = new Set(['pipeline', 'active', 'talent_pool', 'placed'])
@@ -733,18 +733,23 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
       <tr
         className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors"
       >
-        <TD className="font-mono text-xs text-[#999] whitespace-nowrap">{row.id}</TD>
         <TD>
           <span
             onClick={(e) => { e.stopPropagation(); onSelect(row) }}
             className="font-medium text-[#0F0F12] block truncate max-w-[150px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
           >{row.name}</span>
+          <span className="text-xs text-[#999] font-mono block mt-0.5">{row.id ?? '—'}</span>
         </TD>
         <TD>
           <span className="text-[#666] block truncate max-w-[140px]">{row.skill_role ?? '—'}</span>
         </TD>
         <TD>
-          <span className="text-[#666] block truncate max-w-[120px]">{row.clients?.name ?? '—'}</span>
+          <p className="text-xs font-medium text-[#0F0F12] truncate max-w-[170px]">
+            {mc?.mandates?.clients?.name ?? '—'}
+          </p>
+          <p className="text-xs text-[#999] truncate max-w-[170px] mt-0.5">
+            {mc?.mandates?.title ?? '—'}{mc?.mandates?.job_id ? ` · ${mc.mandates.job_id}` : ''}
+          </p>
         </TD>
         <TD onClick={(e) => e.stopPropagation()}>
           {mc ? (
@@ -798,10 +803,9 @@ function AllCandidatesTable({ rows, loading, onSelect, onRefresh }) {
     <table className="w-full min-w-[960px] border-collapse">
         <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
           <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
-            <TH className="w-36">Candidate ID</TH>
-            <TH>Name</TH>
+            <TH>Candidate</TH>
             <TH>Role</TH>
-            <TH>Client</TH>
+            <TH>Client · Mandate</TH>
             <TH className="w-28">Stage</TH>
             <TH className="w-36">Status</TH>
             <TH>Recruiter</TH>
@@ -831,7 +835,7 @@ export default function Pipeline() {
   const { session } = useAuth()
   const { isRecruiter, isAccountManager, isFounder } = useRole()
 
-  const [activeTab, setActiveTab]   = useState('pipeline')
+  const [activeTab, setActiveTab]   = useState('active')
   const [amViewMode, setAmViewMode] = useState('my_submissions')
   const [page, setPage]             = useState(1)
   const [rows, setRows]             = useState([])
@@ -989,15 +993,23 @@ export default function Pipeline() {
         const c = r.mandates?.clients
         if (c?.id) seen.set(c.id, c)
       })
+    } else if (activeTab === 'all') {
+      // all: candidates have no live client_id of their own -- client comes
+      // from the mandate the candidate is linked to via mandate_candidates
+      rows.forEach((r) => {
+        const c = latestMC(r)?.mandates?.clients
+        if (c?.id) seen.set(c.id, c)
+      })
     } else {
-      // unassigned and all tabs: client is a direct field on the candidate row
+      // unassigned: candidates aren't linked to a mandate yet, so there's
+      // genuinely no client to show
       rows.forEach((r) => {
         const c = r.clients
         if (c?.id) seen.set(c.id, c)
       })
     }
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [rows, isMCTab])
+  }, [rows, isMCTab, activeTab])
 
   const recruiters = useMemo(() => {
     const seen = new Map()
@@ -1039,8 +1051,8 @@ export default function Pipeline() {
         if (q && !r.name?.toLowerCase().includes(q) &&
             !r.skill_role?.toLowerCase().includes(q) &&
             !r.email?.toLowerCase().includes(q)) return false
-        if (clientFilter && r.clients?.id !== clientFilter) return false
         const mc = latestMC(r)
+        if (clientFilter && mc?.mandates?.clients?.id !== clientFilter) return false
         if (stageFilter && mc?.stage !== stageFilter) return false
         if (statusFilter && mc?.status !== statusFilter) return false
         if (recruiterFilter && r.recruiter_id !== recruiterFilter) return false
