@@ -13,6 +13,7 @@ import { StageBadge, StatusBadge as CandidateStatusBadge } from '../components/p
 import { logActivity } from '../lib/activityLog'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
 import Pagination from '../components/Pagination'
+import { formatTime12h } from '../lib/formatTime'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -84,14 +85,6 @@ function formatRelDate(str) {
   if (days < 7)  return `${days}d ago`
   if (days < 30) return `${Math.floor(days / 7)}w ago`
   return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-}
-
-function formatTime(str) {
-  if (!str) return ''
-  const [h, m] = str.split(':').map(Number)
-  if (isNaN(h)) return str
-  const period = h >= 12 ? 'PM' : 'AM'
-  return `${h % 12 || 12}:${String(m ?? 0).padStart(2, '0')} ${period}`
 }
 
 function formatMoney(val) {
@@ -524,7 +517,7 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
 
   const hasInterview = mc.interview_date && INTERVIEW_STAGES.has(stage)
   const interviewStr = hasInterview
-    ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime(mc.interview_time) : null].filter(Boolean).join(' · ')
+    ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime12h(mc.interview_time) : null].filter(Boolean).join(' · ')
     : null
   const ctcStr     = formatMoney(mc.offered_ctc)
   const billingStr = formatMoney(mc.billing_value_approx)

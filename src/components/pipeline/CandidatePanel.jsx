@@ -9,6 +9,7 @@ import UnsavedChangesModal from '../UnsavedChangesModal'
 import { generateApplicantId } from '../../lib/generateApplicantId'
 import useRole from '../../hooks/useRole'
 import { logActivity } from '../../lib/activityLog'
+import { formatTime12h } from '../../lib/formatTime'
 
 function Field({ label, children, colSpan2 = false }) {
   return (
@@ -36,14 +37,6 @@ function formatDate(str) {
 function formatDateShort(str) {
   if (!str) return null
   return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-}
-
-function formatTime(str) {
-  if (!str) return ''
-  const [h, m] = str.split(':').map(Number)
-  if (isNaN(h)) return str
-  const period = h >= 12 ? 'PM' : 'AM'
-  return `${h % 12 || 12}:${String(m ?? 0).padStart(2, '0')} ${period}`
 }
 
 function formatDateTime(str) {
@@ -735,7 +728,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                 {linkedMandates.map((mc) => {
                   const days = daysInStageMC(mc)
                   const interviewLine = mc.interview_date
-                    ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime(mc.interview_time) : null].filter(Boolean).join(' · ')
+                    ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime12h(mc.interview_time) : null].filter(Boolean).join(' · ')
                     : null
                   const activeReminder = mc.interview_reminders?.find(
                     (r) => !r.fired_at && !r.cancelled_at

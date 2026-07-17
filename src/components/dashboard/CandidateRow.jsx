@@ -1,4 +1,5 @@
 import { StageBadge, StatusBadge } from '../pipeline/StageBadge'
+import { formatTime12h } from '../../lib/formatTime'
 
 const INTERVIEW_STAGES = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
 
@@ -22,7 +23,7 @@ export default function CandidateRow({ candidate: c, onClick }) {
       interviewDojContent = (
         <div>
           <span className="text-sm text-[#0F0F12]">{d}</span>
-          {c.interview_time && <span className="block text-xs text-[#999]">{c.interview_time}</span>}
+          {c.interview_time && <span className="block text-xs text-[#999]">{formatTime12h(c.interview_time)}</span>}
         </div>
       )
     } else {

@@ -11,6 +11,7 @@ import { useProfile } from '../hooks/useProfile'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activityLog'
+import { formatTime12h } from '../lib/formatTime'
 import {
   STAGES,
   STAGE_STATUS_MAP,
@@ -61,7 +62,7 @@ const UNASSIGNED_SELECT = CANDIDATE_FIELDS
 
 const ALL_SELECT = `
   ${CANDIDATE_FIELDS},
-  mandate_candidates(id, candidate_id, mandate_id, applicant_id, stage, status, status_changed_at, billing_value_approx, mandates(id, title, job_id, clients(id, name)))
+  mandate_candidates(id, candidate_id, mandate_id, applicant_id, stage, status, status_changed_at, interview_date, interview_time, billing_value_approx, mandates(id, title, job_id, clients(id, name)))
 `
 
 const MC_TABS = new Set(['pipeline', 'active', 'talent_pool', 'placed'])
@@ -78,6 +79,24 @@ const ALL_STATUSES_FLAT = [...new Set(Object.values(STAGE_STATUS_MAP).flat())].s
 const INTERVIEW_STAGES = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
 
 // ─── helpers ────────────────────────────────────────────────────────────────
+
+// Standalone entry point for adding/editing a candidate's interview date & time
+// without going through a stage change. Only shown for interview-eligible stages.
+function InterviewTimeButton({ stage, hasTime, onClick }) {
+  if (!INTERVIEW_STAGES.has(stage)) return null
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      className="text-[#999] hover:text-[#5E6AD2] transition-colors shrink-0"
+      title={hasTime ? 'Edit interview time' : 'Add interview time'}
+    >
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+        <rect x="2" y="3" width="12" height="11" rx="1.5" />
+        <path d="M2 6.5h12M5 1.5v3M11 1.5v3" strokeLinecap="round" />
+      </svg>
+    </button>
+  )
+}
 
 function daysSince(dateStr) {
   if (!dateStr) return 0
@@ -300,7 +319,7 @@ function NewMCRow({ row, onSelect, onRefresh }) {
             </span>
           </div>
           {row.interview_time && (
-            <span className="block text-xs text-[#999]">{row.interview_time}</span>
+            <span className="block text-xs text-[#999]">{formatTime12h(row.interview_time)}</span>
           )}
         </div>
       )
@@ -345,11 +364,18 @@ function NewMCRow({ row, onSelect, onRefresh }) {
           </p>
         </TD>
         <TD onClick={(e) => e.stopPropagation()}>
-          <InlineDropdown
-            badge={<StageBadge value={stage || null} />}
-            options={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
-            onSelect={handleStageChange}
-          />
+          <div className="flex items-center gap-1">
+            <InlineDropdown
+              badge={<StageBadge value={stage || null} />}
+              options={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
+              onSelect={handleStageChange}
+            />
+            <InterviewTimeButton
+              stage={stage}
+              hasTime={!!row.interview_date}
+              onClick={() => setPrompt({ type: 'interview' })}
+            />
+          </div>
         </TD>
         <TD onClick={(e) => e.stopPropagation()}>
           <InlineDropdown
@@ -505,11 +531,18 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
           </p>
         </TD>
         <TD onClick={(e) => e.stopPropagation()}>
-          <InlineDropdown
-            badge={<StageBadge value={stage || null} />}
-            options={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
-            onSelect={handleStageChange}
-          />
+          <div className="flex items-center gap-1">
+            <InlineDropdown
+              badge={<StageBadge value={stage || null} />}
+              options={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
+              onSelect={handleStageChange}
+            />
+            <InterviewTimeButton
+              stage={stage}
+              hasTime={!!row.interview_date}
+              onClick={() => setPrompt({ type: 'interview' })}
+            />
+          </div>
         </TD>
         <TD onClick={(e) => e.stopPropagation()}>
           <InlineDropdown
@@ -753,11 +786,18 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
         </TD>
         <TD onClick={(e) => e.stopPropagation()}>
           {mc ? (
-            <InlineDropdown
-              badge={<StageBadge value={stage || null} />}
-              options={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
-              onSelect={handleStageChange}
-            />
+            <div className="flex items-center gap-1">
+              <InlineDropdown
+                badge={<StageBadge value={stage || null} />}
+                options={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
+                onSelect={handleStageChange}
+              />
+              <InterviewTimeButton
+                stage={stage}
+                hasTime={!!mc.interview_date}
+                onClick={() => setPrompt({ type: 'interview' })}
+              />
+            </div>
           ) : (
             <StageBadge value={null} />
           )}
