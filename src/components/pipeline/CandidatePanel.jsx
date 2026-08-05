@@ -465,6 +465,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       phone:                candidate.phone ?? '',
       alt_contact:          candidate.alt_contact ?? '',
       current_location:     candidate.current_location ?? '',
+      hometown:             candidate.hometown ?? '',
       preferred_location:   candidate.preferred_location ?? '',
       education:            candidate.education ?? '',
       year_of_passing:      candidate.year_of_passing?.toString() ?? '',
@@ -559,6 +560,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       phone:              editFields.phone.trim() || null,
       alt_contact:        editFields.alt_contact.trim() || null,
       current_location:   editFields.current_location.trim() || null,
+      hometown:           editFields.hometown.trim() || null,
       preferred_location: editFields.preferred_location.trim() || null,
       education:          editFields.education || null,
       year_of_passing:    editFields.year_of_passing ? parseInt(editFields.year_of_passing, 10) : null,
@@ -1030,6 +1032,9 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                 <EditField label="Current location">
                   <input type="text" value={editFields.current_location || ''} onChange={(e) => setEditField('current_location', e.target.value)} className={fldCls} />
                 </EditField>
+                <EditField label="Hometown">
+                  <input type="text" value={editFields.hometown || ''} onChange={(e) => setEditField('hometown', e.target.value)} className={fldCls} />
+                </EditField>
                 <EditField label="Preferred location">
                   <input type="text" value={editFields.preferred_location || ''} onChange={(e) => setEditField('preferred_location', e.target.value)} className={fldCls} />
                 </EditField>
@@ -1185,6 +1190,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                 <Field label="Phone">{candidate?.phone}</Field>
                 <Field label="Alt contact">{candidate?.alt_contact}</Field>
                 <Field label="Current location">{candidate?.current_location}</Field>
+                <Field label="Hometown">{candidate?.hometown}</Field>
                 <Field label="Preferred location">{candidate?.preferred_location}</Field>
                 <Field label="Education">{candidate?.education}</Field>
                 <Field label="Year of passing">{candidate?.year_of_passing}</Field>

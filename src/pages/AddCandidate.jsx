@@ -19,7 +19,7 @@ const INITIAL = {
   // Identity
   name: '', email: '', phone: '', alt_contact: '',
   // Location
-  current_location: '', preferred_location: '', willing_to_relocate: false,
+  current_location: '', hometown: '', preferred_location: '', willing_to_relocate: false,
   // Professional
   current_company: '', skill_role: '', emp_mode: '', payroll_company: '',
   total_exp: '', relevant_exp: '',
@@ -43,6 +43,7 @@ function validate(f, resumeFile) {
   if (!f.phone.trim())              e.phone            = 'Required'
   else if (!/^\d{10}$/.test(f.phone.trim())) e.phone   = 'Must be exactly 10 digits'
   if (!f.current_location.trim())   e.current_location = 'Required'
+  if (!f.hometown.trim())           e.hometown         = 'Required'
   if (!f.preferred_location.trim()) e.preferred_location = 'Required'
   if (!f.current_company.trim())    e.current_company  = 'Required'
   if (!f.skill_role.trim())         e.skill_role       = 'Required'
@@ -183,6 +184,7 @@ export default function AddCandidate() {
       alt_contact:   form.alt_contact.trim() || null,
       // Location
       current_location:    form.current_location.trim(),
+      hometown:            form.hometown.trim(),
       preferred_location:  form.preferred_location.trim(),
       willing_to_relocate: form.willing_to_relocate,
       // Professional
@@ -300,6 +302,9 @@ export default function AddCandidate() {
           <FormSection title="Location">
             <FormField label="Current location" required error={errors.current_location}>
               <input type="text" value={form.current_location} onChange={(e) => setField('current_location', e.target.value)} placeholder="Bengaluru" className={inputCls(errors.current_location)} />
+            </FormField>
+            <FormField label="Hometown" required error={errors.hometown}>
+              <input type="text" value={form.hometown} onChange={(e) => setField('hometown', e.target.value)} placeholder="Bengaluru" className={inputCls(errors.hometown)} />
             </FormField>
             <FormField label="Preferred location" required error={errors.preferred_location}>
               <input type="text" value={form.preferred_location} onChange={(e) => setField('preferred_location', e.target.value)} placeholder="Bengaluru" className={inputCls(errors.preferred_location)} />

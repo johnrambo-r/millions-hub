@@ -36,7 +36,7 @@ const TABS = [
 
 const CANDIDATE_FIELDS = `
   id, name, email, phone, alt_contact,
-  current_location, preferred_location, willing_to_relocate,
+  current_location, hometown, preferred_location, willing_to_relocate,
   education, year_of_passing,
   current_company, skill_role, total_exp, relevant_exp,
   emp_mode, payroll_company, notice_period,

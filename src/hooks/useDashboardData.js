@@ -32,7 +32,7 @@ const MC_DASHBOARD_SELECT = `
   mandates(id, title, job_id, clients(id, name), am:profiles!am_id(id, name)),
   candidates(
     id, name, skill_role, total_exp, email, phone, alt_contact,
-    current_location, preferred_location,
+    current_location, hometown, preferred_location,
     education, year_of_passing,
     current_company, emp_mode, payroll_company, notice_period,
     current_ctc, expected_ctc,
