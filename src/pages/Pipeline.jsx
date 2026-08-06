@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import Pagination from '../components/Pagination'
 import AppShell from '../components/layout/AppShell'
@@ -177,21 +178,38 @@ function SelectFilter({ value, onChange, placeholder, children }) {
 
 // Mobile-only compact filter control: a pill showing the current selection
 // (or its label when unset) that opens a small dropdown anchored below it.
+// The dropdown is rendered via a portal into document.body — the pill row
+// it lives in scrolls horizontally (overflow-x-auto), which per the CSS
+// overflow spec also clips the vertical axis, so an absolutely-positioned
+// child anchored inside it gets cut off instead of overlaying the cards
+// below. Portaling out to the body sidesteps that clipping ancestor.
 function FilterPill({ title, value, options, onSelect }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef(null)
+  const [rect, setRect] = useState(null)
+  const btnRef = useRef(null)
+  const menuRef = useRef(null)
+
+  function openMenu() {
+    setRect(btnRef.current?.getBoundingClientRect() ?? null)
+    setOpen(true)
+  }
 
   useEffect(() => {
     if (!open) return
-    function handler(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    function handleClick(e) {
+      if (btnRef.current?.contains(e.target)) return
+      if (menuRef.current?.contains(e.target)) return
+      setOpen(false)
     }
-    function onKey(e) { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    document.addEventListener('keydown', onKey)
+    function handleScroll() { setOpen(false) }
+    function handleKey(e) { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('scroll', handleScroll, true)
+    document.addEventListener('keydown', handleKey)
     return () => {
-      document.removeEventListener('mousedown', handler)
-      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('scroll', handleScroll, true)
+      document.removeEventListener('keydown', handleKey)
     }
   }, [open])
 
@@ -199,11 +217,12 @@ function FilterPill({ title, value, options, onSelect }) {
   const shown = selected ? selected.label : title
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={`h-8 max-w-[140px] px-3 rounded-full text-xs font-medium whitespace-nowrap truncate border transition ${
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        className={`h-8 max-w-[140px] px-3 rounded-full text-xs font-medium whitespace-nowrap truncate border transition shrink-0 ${
           value
             ? 'bg-[#5E6AD2]/10 border-[#5E6AD2]/40 text-[#5E6AD2]'
             : 'bg-white border-[#E0E0E8] text-[#666]'
@@ -211,8 +230,12 @@ function FilterPill({ title, value, options, onSelect }) {
       >
         {shown}
       </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 z-20 bg-white border border-[#E0E0E8] rounded-lg shadow-lg min-w-[170px] max-h-64 overflow-y-auto">
+      {open && rect && createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-50 bg-white border border-[#E0E0E8] rounded-lg shadow-lg min-w-[170px] max-h-64 overflow-y-auto"
+          style={{ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - 178)) }}
+        >
           <button
             type="button"
             onMouseDown={(e) => { e.preventDefault(); onSelect(''); setOpen(false) }}
@@ -230,9 +253,10 @@ function FilterPill({ title, value, options, onSelect }) {
               {opt.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
 
