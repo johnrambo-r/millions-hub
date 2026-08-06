@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import { supabase } from '../lib/supabase'
 import useRole from '../hooks/useRole'
@@ -304,6 +304,11 @@ export default function Users() {
   const [search, setSearch] = useState('')
   const [showInvite, setShowInvite] = useState(false)
   const [inviteSuccess, setInviteSuccess] = useState('')
+  const [searchParams] = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('invite') === '1') setShowInvite(true)
+  }, [searchParams])
 
   useEffect(() => {
     if (roleLoading) return

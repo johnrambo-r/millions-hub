@@ -7,8 +7,7 @@ export default function Topbar({ title }) {
 
   return (
     <header
-      className="fixed top-0 right-0 flex items-center justify-between px-5 border-b border-[#F0F0F4] bg-white z-20"
-      style={{ left: 44, height: 40 }}
+      className="fixed top-0 right-0 left-0 md:left-[44px] h-10 flex items-center justify-between px-5 border-b border-[#F0F0F4] bg-white z-20"
     >
       <span className="text-sm font-semibold text-[#0F0F12]">{title}</span>
 

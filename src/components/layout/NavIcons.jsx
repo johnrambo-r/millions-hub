@@ -76,6 +76,16 @@ export function IconSearch({ className }) {
   )
 }
 
+export function IconMore({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor" stroke="none">
+      <circle cx="4" cy="10" r="1.75" />
+      <circle cx="10" cy="10" r="1.75" />
+      <circle cx="16" cy="10" r="1.75" />
+    </svg>
+  )
+}
+
 export function IconReports({ className }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">

@@ -1,43 +1,7 @@
 import { NavLink } from 'react-router-dom'
-import {
-  IconDashboard, IconPipeline, IconAddCandidate, IconClients,
-  IconSettings, IconUsers, IconMandates, IconSearch,
-} from './NavIcons'
+import { IconSearch } from './NavIcons'
+import { getNav } from './navConfig'
 import useRole from '../../hooks/useRole'
-
-const FOUNDER_NAV = [
-  { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
-  { to: '/pipeline', icon: IconPipeline, label: 'Candidates' },
-  { to: '/clients', icon: IconClients, label: 'Clients' },
-  { to: '/mandates', icon: IconMandates, label: 'Mandates' },
-  { to: '/users', icon: IconUsers, label: 'Users' },
-  { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
-  { to: '/settings', icon: IconSettings, label: 'Settings' },
-]
-
-const ACCOUNT_MANAGER_NAV = [
-  { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
-  { to: '/pipeline', icon: IconPipeline, label: 'Candidates' },
-  { to: '/clients', icon: IconClients, label: 'Clients' },
-  { to: '/mandates', icon: IconMandates, label: 'Mandates' },
-  { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
-  { to: '/settings', icon: IconSettings, label: 'Settings' },
-]
-
-const RECRUITER_NAV = [
-  { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
-  { to: '/pipeline', icon: IconPipeline, label: 'Candidates' },
-  { to: '/mandates', icon: IconMandates, label: 'Mandates' },
-  { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
-  { to: '/settings', icon: IconSettings, label: 'Settings' },
-]
-
-function getNav(role) {
-  if (role === 'founder') return FOUNDER_NAV
-  if (role === 'account_manager') return ACCOUNT_MANAGER_NAV
-  if (role === 'recruiter') return RECRUITER_NAV
-  return FOUNDER_NAV
-}
 
 function NavIcon({ to, icon: Icon, label }) {
   return (
@@ -74,7 +38,7 @@ export default function Sidebar({ onSearchOpen }) {
 
   return (
     <aside
-      className="fixed left-0 top-0 h-full flex flex-col items-center py-3 gap-1 z-30"
+      className="hidden md:flex fixed left-0 top-0 h-full flex-col items-center py-3 gap-1 z-30"
       style={{ width: 44, backgroundColor: '#0F0F12' }}
     >
       {/* Logo mark */}
