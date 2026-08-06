@@ -3,9 +3,9 @@ import { ACTIVE_STATUSES, PLACED_STATUSES } from '../../lib/candidateConstants'
 
 const VISIBLE_STATUSES = new Set([...ACTIVE_STATUSES, ...PLACED_STATUSES])
 
-function WarnIcon() {
+function WarnIcon({ blocking }) {
   return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4 text-amber-600">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className={`w-4 h-4 ${blocking ? 'text-[#D93025]' : 'text-amber-600'}`}>
       <path d="M10 3L2 17h16L10 3z" strokeLinejoin="round" />
       <path d="M10 9v3M10 14.5v.5" strokeLinecap="round" />
     </svg>
@@ -29,8 +29,9 @@ function ActiveMandates({ mandateCandidates }) {
   )
 }
 
-export default function DuplicateModal({ duplicates, submittedName, onProceed, onCancel, onUseExisting }) {
-  if (!duplicates) return null
+export default function DuplicateModal({ data, submittedName, onProceed, onCancel, onUseExisting }) {
+  if (!data) return null
+  const { items: duplicates, blocking } = data
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -38,15 +39,17 @@ export default function DuplicateModal({ duplicates, submittedName, onProceed, o
 
         {/* Header */}
         <div className="flex items-start gap-3 px-6 pt-6 pb-4">
-          <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
-            <WarnIcon />
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${blocking ? 'bg-red-100' : 'bg-amber-100'}`}>
+            <WarnIcon blocking={blocking} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-[#0F0F12]">Possible duplicate detected</h3>
+            <h3 className="text-sm font-semibold text-[#0F0F12]">
+              {blocking ? 'You already added this candidate today' : 'Possible duplicate detected'}
+            </h3>
             <p className="text-xs text-[#666] mt-1 leading-relaxed">
-              {duplicates.length} existing candidate{duplicates.length > 1 ? 's' : ''}{' '}
-              match{duplicates.length === 1 ? 'es' : ''} the email or phone number you entered.
-              Check before proceeding.
+              {blocking
+                ? 'You submitted a candidate with this email or phone number earlier today. Edit their existing profile instead of creating a duplicate.'
+                : `${duplicates.length} existing candidate${duplicates.length > 1 ? 's' : ''} match${duplicates.length === 1 ? 'es' : ''} the email or phone number you entered. Check before proceeding.`}
             </p>
           </div>
         </div>
@@ -89,15 +92,17 @@ export default function DuplicateModal({ duplicates, submittedName, onProceed, o
             onClick={onCancel}
             className="h-9 px-4 rounded-lg border border-[#F0F0F4] text-sm font-medium text-[#666] hover:bg-[#FAFAFA] transition"
           >
-            Cancel
+            {blocking ? 'Go back' : 'Cancel'}
           </button>
-          <button
-            onClick={onProceed}
-            className="h-9 px-4 rounded-lg text-sm font-semibold text-white transition hover:opacity-90"
-            style={{ backgroundColor: '#5E6AD2' }}
-          >
-            Create new profile
-          </button>
+          {!blocking && (
+            <button
+              onClick={onProceed}
+              className="h-9 px-4 rounded-lg text-sm font-semibold text-white transition hover:opacity-90"
+              style={{ backgroundColor: '#5E6AD2' }}
+            >
+              Create new profile
+            </button>
+          )}
         </div>
       </div>
     </div>

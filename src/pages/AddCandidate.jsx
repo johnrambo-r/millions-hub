@@ -156,6 +156,24 @@ export default function AddCandidate() {
       return { success: false, reason: 'validation' }
     }
 
+    const { data: { user } } = await supabase.auth.getUser()
+    const recruiter_id = user.id
+
+    // Hard block: same user already added a matching candidate today. No force override.
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    const { data: ownDupes } = await supabase
+      .from('candidates')
+      .select('id, name, email, phone, mandate_candidates(stage, status, mandate_id, mandates(id, title))')
+      .eq('recruiter_id', recruiter_id)
+      .gte('created_at', startOfToday.toISOString())
+      .or(`email.eq.${form.email.trim()},phone.eq.${form.phone.trim()}`)
+
+    if (ownDupes?.length > 0) {
+      setDuplicates({ items: ownDupes, blocking: true })
+      return { success: false, reason: 'same_day_duplicate' }
+    }
+
     if (!force) {
       const { data: dupes } = await supabase
         .from('candidates')
@@ -163,7 +181,7 @@ export default function AddCandidate() {
         .or(`email.eq.${form.email.trim()},phone.eq.${form.phone.trim()}`)
 
       if (dupes?.length > 0) {
-        setDuplicates(dupes)
+        setDuplicates({ items: dupes, blocking: false })
         return { success: false, reason: 'duplicates' }
       }
     }
@@ -171,9 +189,6 @@ export default function AddCandidate() {
     setDuplicates(null)
     setSubmitting(true)
     setFormError('')
-
-    const { data: { user } } = await supabase.auth.getUser()
-    const recruiter_id = user.id
 
     const payload = {
       recruiter_id:  recruiter_id,
@@ -475,7 +490,7 @@ export default function AddCandidate() {
       </div>
 
       <DuplicateModal
-        duplicates={duplicates}
+        data={duplicates}
         submittedName={form.name.trim()}
         onCancel={() => setDuplicates(null)}
         onProceed={() => submitCandidate(true)}
