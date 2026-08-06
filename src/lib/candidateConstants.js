@@ -63,6 +63,8 @@ export const TALENT_POOL_STATUSES = [
 
 export const PLACED_STATUSES = ['Joined', 'JYTR', 'Invoice Raised']
 
+export const INTERVIEW_STAGES = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
+
 export const PASSING_YEARS = Array.from({ length: 2025 - 1985 + 1 }, (_, i) => 2025 - i)
 
 export function getNextStageOptions(currentStage) {

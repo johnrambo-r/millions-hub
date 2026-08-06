@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { StageBadge, StatusBadge } from './StageBadge'
+import { InlineDropdown, StagePromptModal } from './InlineStageStatus'
 import {
   QUALIFICATIONS, PASSING_YEARS, NOTICE_PERIODS,
+  STAGE_STATUS_MAP, INTERVIEW_STAGES, getNextStageOptions, getAllStageOptions,
 } from '../../lib/candidateConstants'
 import UnsavedChangesModal from '../UnsavedChangesModal'
 import { generateApplicantId } from '../../lib/generateApplicantId'
@@ -197,7 +199,7 @@ function LinkMandateModal({ candidateId, linkedMandateIds, userId, onClose, onLi
 
 export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSelect, onPendingResolved, onPendingCancelled }) {
   const { session } = useAuth()
-  const { role, isRecruiter, loading: roleLoading } = useRole()
+  const { role, isRecruiter, isFounder, loading: roleLoading } = useRole()
   const userId = session?.user?.id
 
   const [activityLog, setActivityLog] = useState([])
@@ -229,6 +231,9 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   const [editingMcId, setEditingMcId] = useState(null)
   const [mcEditFields, setMcEditFields] = useState({})
   const [mcSaving, setMcSaving] = useState(false)
+
+  // Inline stage/status editing (same logic/permissions as the Pipeline table view)
+  const [stagePrompt, setStagePrompt] = useState(null)
 
   // Interview reschedule (all roles)
   const [reschedulingMcId, setReschedulingMcId] = useState(null)
@@ -409,6 +414,44 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
         setLinkedMandates(data ?? [])
         setMandatesLoading(false)
       })
+  }
+
+  async function handleMcStageChange(mc, newStage) {
+    const oldStage  = mc.stage
+    const oldStatus = mc.status
+    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
+
+    await supabase.from('mandate_candidates')
+      .update({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
+      .eq('id', mc.id)
+
+    await logActivity({ candidateId: candidate.id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy: userId, changeType: 'stage', oldValue: oldStage, newValue: newStage })
+    if (oldStatus !== newStatus) {
+      await logActivity({ candidateId: candidate.id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy: userId, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    }
+
+    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
+      setStagePrompt({ mcId: mc.id, type: 'assessment' })
+    } else if (INTERVIEW_STAGES.has(newStage)) {
+      setStagePrompt({ mcId: mc.id, type: 'interview' })
+    } else if (newStage === 'Offer') {
+      setStagePrompt({ mcId: mc.id, type: 'offer' })
+    } else if (newStage === 'Joining') {
+      setStagePrompt({ mcId: mc.id, type: 'joining' })
+    } else {
+      loadLinkedMandates(candidate.id)
+    }
+  }
+
+  async function handleMcStatusChange(mc, newStatus) {
+    const oldStatus = mc.status
+    await supabase.from('mandate_candidates').update({ status: newStatus, status_changed_at: new Date().toISOString() }).eq('id', mc.id)
+    await logActivity({ candidateId: candidate.id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy: userId, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    if (newStatus === 'Invoice Raised') {
+      setStagePrompt({ mcId: mc.id, type: 'invoice' })
+    } else {
+      loadLinkedMandates(candidate.id)
+    }
   }
 
   function resetEditState() {
@@ -753,9 +796,18 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                           <span className="font-mono text-xs text-[#999] shrink-0">{mc.applicant_id}</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        {mc.stage  && <StageBadge value={mc.stage} />}
-                        {mc.status && <StatusBadge value={mc.status} />}
+                      <div className="flex items-center gap-1.5 mt-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                        <InlineDropdown
+                          badge={<StageBadge value={mc.stage || null} />}
+                          options={isFounder ? getAllStageOptions(mc.stage) : getNextStageOptions(mc.stage)}
+                          onSelect={(newStage) => handleMcStageChange(mc, newStage)}
+                        />
+                        <InlineDropdown
+                          badge={<StatusBadge value={mc.status || null} />}
+                          options={mc.stage ? (STAGE_STATUS_MAP[mc.stage] ?? []) : []}
+                          onSelect={(newStatus) => handleMcStatusChange(mc, newStatus)}
+                          disabled={!mc.stage}
+                        />
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${daysBadgeColor(days)}`}>
                           {days}d
                         </span>
@@ -1001,6 +1053,16 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                             Cancel
                           </button>
                         </div>
+                      )}
+                      {stagePrompt?.mcId === mc.id && (
+                        <StagePromptModal
+                          type={stagePrompt.type}
+                          mcId={mc.id}
+                          supabaseClient={supabase}
+                          existingData={mc}
+                          userId={userId}
+                          onClose={() => { setStagePrompt(null); loadLinkedMandates(candidate.id) }}
+                        />
                       )}
                     </li>
                   )

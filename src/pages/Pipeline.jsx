@@ -18,6 +18,7 @@ import {
   ACTIVE_STATUSES,
   TALENT_POOL_STATUSES,
   PLACED_STATUSES,
+  INTERVIEW_STAGES,
   getNextStageOptions,
   getAllStageOptions,
 } from '../lib/candidateConstants'
@@ -75,8 +76,6 @@ const L2_ABOVE_STAGES = STAGES.slice(STAGES.indexOf('L2'))
 
 // All statuses flattened — used in status dropdown when no stage is selected
 const ALL_STATUSES_FLAT = [...new Set(Object.values(STAGE_STATUS_MAP).flat())].sort()
-
-const INTERVIEW_STAGES = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
