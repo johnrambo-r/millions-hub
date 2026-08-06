@@ -16,7 +16,7 @@ import { createInterviewReminder } from '../../lib/interviewReminders'
 
 function Field({ label, children, colSpan2 = false }) {
   return (
-    <div className={colSpan2 ? 'col-span-2' : ''}>
+    <div className={colSpan2 ? 'sm:col-span-2' : ''}>
       <dt className="text-xs font-medium text-[#999] uppercase tracking-wide mb-0.5">{label}</dt>
       <dd className="text-sm text-[#0F0F12]">{children || '—'}</dd>
     </div>
@@ -25,7 +25,7 @@ function Field({ label, children, colSpan2 = false }) {
 
 function EditField({ label, children, colSpan2 = false }) {
   return (
-    <div className={colSpan2 ? 'col-span-2' : ''}>
+    <div className={colSpan2 ? 'sm:col-span-2' : ''}>
       <label className="text-xs font-medium text-[#999] uppercase tracking-wide mb-1 block">{label}</label>
       {children}
     </div>
@@ -691,13 +691,13 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
       {/* Slide-in panel */}
       <div
-        className="fixed top-0 right-0 h-full bg-white shadow-2xl z-50 flex flex-col transition-transform duration-200 ease-out"
-        style={{ width: 480, transform: isOpen ? 'translateX(0)' : 'translateX(100%)' }}
+        className="fixed top-0 right-0 h-full bg-white shadow-2xl z-50 flex flex-col transition-transform duration-200 ease-out w-full sm:w-[480px]"
+        style={{ transform: isOpen ? 'translateX(0)' : 'translateX(100%)' }}
         aria-modal="true"
         role="dialog"
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-6 py-5 border-b border-[#F0F0F4] shrink-0">
+        <div className="flex items-start justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-[#F0F0F4] shrink-0">
           <div className="min-w-0 pr-4">
             <h2 className="text-base font-semibold text-[#0F0F12] truncate">{candidate?.name}</h2>
             {candidate?.id && (
@@ -706,31 +706,34 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
             <p className="text-sm text-[#666] mt-0.5 truncate">{candidate?.skill_role ?? '—'}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {!isEditing ? (
-              <button
-                onClick={handleEditStart}
-                className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:border-[#5E6AD2] hover:text-[#5E6AD2] transition"
-              >
-                Edit
-              </button>
-            ) : (
-              <>
+            {/* Editing is desktop-only for now — view-only on mobile */}
+            <div className="hidden md:flex items-center gap-2">
+              {!isEditing ? (
                 <button
-                  onClick={handleEditCancel}
-                  className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition"
+                  onClick={handleEditStart}
+                  className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:border-[#5E6AD2] hover:text-[#5E6AD2] transition"
                 >
-                  Cancel
+                  Edit
                 </button>
-                <button
-                  onClick={handleEditSave}
-                  disabled={editSaving}
-                  className="h-8 px-4 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: '#5E6AD2' }}
-                >
-                  {editSaving ? 'Saving…' : 'Save changes'}
-                </button>
-              </>
-            )}
+              ) : (
+                <>
+                  <button
+                    onClick={handleEditCancel}
+                    className="h-8 px-3 rounded-lg text-sm border border-[#F0F0F4] text-[#666] hover:bg-[#F5F5F8] transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleEditSave}
+                    disabled={editSaving}
+                    className="h-8 px-4 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: '#5E6AD2' }}
+                  >
+                    {editSaving ? 'Saving…' : 'Save changes'}
+                  </button>
+                </>
+              )}
+            </div>
             <button
               onClick={handleRequestClose}
               className="text-[#999] hover:text-[#0F0F12] transition-colors"
@@ -742,7 +745,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 space-y-6">
 
           {/* Success banner */}
           {editSuccess && (
@@ -759,7 +762,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
               </h3>
               <button
                 onClick={() => setShowLinkModal(true)}
-                className="h-7 px-3 rounded-lg text-xs font-semibold border border-[#5E6AD2] text-[#5E6AD2] hover:bg-[#5E6AD2]/5 transition"
+                className="hidden md:block h-7 px-3 rounded-lg text-xs font-semibold border border-[#5E6AD2] text-[#5E6AD2] hover:bg-[#5E6AD2]/5 transition"
               >
                 Link to Mandate
               </button>
@@ -797,17 +800,25 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                        <InlineDropdown
-                          badge={<StageBadge value={mc.stage || null} />}
-                          options={isFounder ? getAllStageOptions(mc.stage) : getNextStageOptions(mc.stage)}
-                          onSelect={(newStage) => handleMcStageChange(mc, newStage)}
-                        />
-                        <InlineDropdown
-                          badge={<StatusBadge value={mc.status || null} />}
-                          options={mc.stage ? (STAGE_STATUS_MAP[mc.stage] ?? []) : []}
-                          onSelect={(newStatus) => handleMcStatusChange(mc, newStatus)}
-                          disabled={!mc.stage}
-                        />
+                        {/* Mobile: view-only badges */}
+                        <span className="md:hidden inline-flex items-center gap-1.5 flex-wrap">
+                          <StageBadge value={mc.stage || null} />
+                          <StatusBadge value={mc.status || null} />
+                        </span>
+                        {/* Desktop: editable dropdowns */}
+                        <span className="hidden md:inline-flex items-center gap-1.5">
+                          <InlineDropdown
+                            badge={<StageBadge value={mc.stage || null} />}
+                            options={isFounder ? getAllStageOptions(mc.stage) : getNextStageOptions(mc.stage)}
+                            onSelect={(newStage) => handleMcStageChange(mc, newStage)}
+                          />
+                          <InlineDropdown
+                            badge={<StatusBadge value={mc.status || null} />}
+                            options={mc.stage ? (STAGE_STATUS_MAP[mc.stage] ?? []) : []}
+                            onSelect={(newStatus) => handleMcStatusChange(mc, newStatus)}
+                            disabled={!mc.stage}
+                          />
+                        </span>
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${daysBadgeColor(days)}`}>
                           {days}d
                         </span>
@@ -826,7 +837,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                                 billing_value_final:    mc.billing_value_final?.toString() ?? '',
                               })
                             }}
-                            className="text-[#999] hover:text-[#5E6AD2] transition-colors ml-1"
+                            className="hidden md:inline-flex text-[#999] hover:text-[#5E6AD2] transition-colors ml-1"
                             title="Edit offer/joining details"
                           >
                             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
@@ -911,7 +922,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                                     setRescheduleDate(mc.interview_date ?? '')
                                     setRescheduleTime(mc.interview_time ?? '')
                                   }}
-                                  className="text-[#999] hover:text-[#5E6AD2] transition-colors ml-0.5"
+                                  className="hidden md:inline-flex text-[#999] hover:text-[#5E6AD2] transition-colors ml-0.5"
                                   title="Reschedule"
                                 >
                                   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
@@ -927,7 +938,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                                   setReminderMcId(mc.id)
                                   setReminderLeadTime(30)
                                 }}
-                                className="text-xs text-[#5E6AD2] hover:underline mt-0.5"
+                                className="hidden md:inline-block text-xs text-[#5E6AD2] hover:underline mt-0.5"
                               >
                                 Set reminder
                               </button>
@@ -945,7 +956,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                                       .eq('id', activeReminder.id)
                                     loadLinkedMandates(candidate.id)
                                   }}
-                                  className="text-[#999] hover:text-[#D93025] transition-colors ml-0.5"
+                                  className="hidden md:inline-flex text-[#999] hover:text-[#D93025] transition-colors ml-0.5"
                                   title="Cancel reminder"
                                 >
                                   ×
@@ -1247,7 +1258,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
           ) : (
             /* ── Read-only detail grid ────────────────────────────────── */
             <>
-              <dl className="grid grid-cols-2 gap-x-8 gap-y-5">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
                 <Field label="Recruiter">{candidate?.profiles?.name}</Field>
                 <Field label="Email">{candidate?.email}</Field>
                 <Field label="Phone">{candidate?.phone}</Field>
@@ -1300,7 +1311,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
               <div className="mt-4 pt-4 border-t border-[#F0F0F4]">
                 <p className="text-xs font-semibold text-[#999] uppercase tracking-wider mb-3">Additional Info</p>
-                <dl className="grid grid-cols-2 gap-x-8 gap-y-4">
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                   <Field label="CTC Breakup" colSpan2>
                     {(() => {
                       const p = safeParseJson(candidate?.ctc_breakup)

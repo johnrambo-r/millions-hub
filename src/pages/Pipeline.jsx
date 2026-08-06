@@ -4,6 +4,7 @@ import Pagination from '../components/Pagination'
 import AppShell from '../components/layout/AppShell'
 import { StageBadge, StatusBadge } from '../components/pipeline/StageBadge'
 import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineStageStatus'
+import CandidateCard from '../components/pipeline/CandidateCard'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
 import AssignMandateModal from '../components/AssignMandateModal'
 import SuccessToast from '../components/add-candidate/SuccessToast'
@@ -133,6 +134,20 @@ function latestMC(row) {
   return mcs.reduce((best, mc) =>
     !best || new Date(mc.status_changed_at) > new Date(best.status_changed_at) ? mc : best
   , null)
+}
+
+function interviewOrDojLine(row) {
+  if (INTERVIEW_STAGES.has(row.stage)) {
+    if (!row.interview_date) return null
+    const d = new Date(row.interview_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    return `Interview: ${d}${row.interview_time ? ' · ' + formatTime12h(row.interview_time) : ''}`
+  }
+  if (row.stage === 'Offer' || row.stage === 'Joining') {
+    if (!row.date_of_joining) return null
+    const d = new Date(row.date_of_joining).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    return `DOJ: ${d}`
+  }
+  return null
 }
 
 // ─── small UI components ────────────────────────────────────────────────────
@@ -419,31 +434,60 @@ function NewMCTable({ rows, loading, onSelect, onRefresh }) {
   if (rows.length === 0) return <EmptyState />
 
   return (
-    <table className="w-full min-w-[1100px] border-collapse">
-        <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
-            <TH>Candidate</TH>
-            <TH>Contact</TH>
-            <TH>Client · Mandate</TH>
-            <TH className="w-28">Stage</TH>
-            <TH className="w-36">Status</TH>
-            <TH className="w-32">Interview / DOJ</TH>
-            <TH>Recruiter · AM</TH>
-            <TH className="w-24">In Stage</TH>
-            <TH className="w-24">Updated</TH>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <NewMCRow
+    <>
+      <div className="hidden md:block">
+        <table className="w-full min-w-[1100px] border-collapse">
+            <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+              <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+                <TH>Candidate</TH>
+                <TH>Contact</TH>
+                <TH>Client · Mandate</TH>
+                <TH className="w-28">Stage</TH>
+                <TH className="w-36">Status</TH>
+                <TH className="w-32">Interview / DOJ</TH>
+                <TH>Recruiter · AM</TH>
+                <TH className="w-24">In Stage</TH>
+                <TH className="w-24">Updated</TH>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <NewMCRow
+                  key={row.id}
+                  row={row}
+                  onSelect={onSelect}
+                  onRefresh={onRefresh}
+                />
+              ))}
+            </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden">
+        {rows.map((row) => {
+          const c = row.candidates ?? {}
+          return (
+            <CandidateCard
               key={row.id}
-              row={row}
-              onSelect={onSelect}
-              onRefresh={onRefresh}
+              onClick={() => onSelect(c)}
+              applicantId={row.applicant_id}
+              name={c.name}
+              meta={[row.mandates?.clients?.name, row.mandates?.title].filter(Boolean).join(' · ') || undefined}
+              stage={row.stage}
+              status={row.status}
+              aging={<InStageBadge dateStr={row.status_changed_at} />}
+              rowBg={noShowRowBg({ status: row.status, status_changed_at: row.status_changed_at })}
+              detailLines={[
+                c.phone,
+                interviewOrDojLine(row),
+                row.linked_by_profile?.name ? `Recruiter: ${row.linked_by_profile.name}` : null,
+                row.status_changed_at ? `Updated ${formatRelativeDate(row.status_changed_at)}` : null,
+              ].filter(Boolean)}
             />
-          ))}
-        </tbody>
-    </table>
+          )
+        })}
+      </div>
+    </>
   )
 }
 
@@ -601,34 +645,61 @@ function MCTable({ rows, loading, onSelect, activeTab, onRefresh, onReassign }) 
   const isTalentPool = activeTab === 'talent_pool'
 
   return (
-    <table className="w-full min-w-[1020px] border-collapse">
-        <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
-            <TH className="w-32">App ID</TH>
-            <TH>Name</TH>
-            <TH>Role</TH>
-            <TH>Client · Mandate</TH>
-            <TH className="w-28">Stage</TH>
-            <TH className="w-36">Status</TH>
-            <TH>Recruiter</TH>
-            <TH className="w-20">Exp</TH>
-            <TH className="w-28">Updated</TH>
-            {isTalentPool && <TH className="w-24"></TH>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <MCRow
+    <>
+      <div className="hidden md:block">
+        <table className="w-full min-w-[1020px] border-collapse">
+            <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+              <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+                <TH className="w-32">App ID</TH>
+                <TH>Name</TH>
+                <TH>Role</TH>
+                <TH>Client · Mandate</TH>
+                <TH className="w-28">Stage</TH>
+                <TH className="w-36">Status</TH>
+                <TH>Recruiter</TH>
+                <TH className="w-20">Exp</TH>
+                <TH className="w-28">Updated</TH>
+                {isTalentPool && <TH className="w-24"></TH>}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <MCRow
+                  key={row.id}
+                  row={row}
+                  onSelect={onSelect}
+                  activeTab={activeTab}
+                  onRefresh={onRefresh}
+                  onReassign={onReassign}
+                />
+              ))}
+            </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden">
+        {rows.map((row) => {
+          const c = row.candidates ?? {}
+          return (
+            <CandidateCard
               key={row.id}
-              row={row}
-              onSelect={onSelect}
-              activeTab={activeTab}
-              onRefresh={onRefresh}
-              onReassign={onReassign}
+              onClick={() => onSelect(c)}
+              applicantId={row.applicant_id}
+              name={c.name}
+              meta={[row.mandates?.clients?.name, row.mandates?.title].filter(Boolean).join(' · ') || undefined}
+              stage={row.stage}
+              status={row.status}
+              detailLines={[
+                c.skill_role,
+                row.linked_by_profile?.name ? `Recruiter: ${row.linked_by_profile.name}` : null,
+                c.total_exp != null ? `Exp: ${c.total_exp} yrs` : null,
+                `Updated ${formatRelativeDate(row.status_changed_at ?? row.linked_at)}`,
+              ].filter(Boolean)}
             />
-          ))}
-        </tbody>
-    </table>
+          )
+        })}
+      </div>
+    </>
   )
 }
 
@@ -639,66 +710,94 @@ function UnassignedTable({ rows, loading, onSelect, onAssign }) {
   if (rows.length === 0) return <EmptyState message="No unassigned candidates" />
 
   return (
-    <table className="w-full min-w-[820px] border-collapse">
-        <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
-            <TH className="w-36">Candidate ID</TH>
-            <TH>Name</TH>
-            <TH>Role</TH>
-            <TH className="w-32">Added</TH>
-            <TH>Email</TH>
-            <TH>Recruiter</TH>
-            <TH className="w-24"></TH>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const bg  = unassignedRowBg(row.created_at)
-            const age = daysSince(row.created_at)
-            return (
-              <tr
-                key={row.id}
-                className={`border-b border-[#F0F0F4] hover:opacity-90 transition-colors ${bg}`}
-              >
-                <TD className="font-mono text-xs text-[#999] whitespace-nowrap">{row.id}</TD>
-                <TD>
-                  <span
-                    onClick={(e) => { e.stopPropagation(); onSelect(row) }}
-                    className="font-medium text-[#0F0F12] block truncate max-w-[160px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
-                  >{row.name}</span>
-                </TD>
-                <TD>
-                  <span className="text-[#666] block truncate max-w-[140px]">{row.skill_role ?? '—'}</span>
-                </TD>
-                <TD>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-[#666]">{formatRelativeDate(row.created_at)}</span>
-                    {age >= 7 && (
-                      <span className={`text-xs font-medium ${age >= 14 ? 'text-red-600' : 'text-amber-600'}`}>
-                        {age}d
-                      </span>
-                    )}
-                  </div>
-                </TD>
-                <TD>
-                  <span className="text-xs text-[#666] block truncate max-w-[160px]">{row.email ?? '—'}</span>
-                </TD>
-                <TD>
-                  <span className="text-[#666] block truncate max-w-[110px]">{row.profiles?.name ?? '—'}</span>
-                </TD>
-                <TD onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={() => onAssign({ id: row.id, name: row.name })}
-                    className="h-6 px-2.5 rounded text-xs font-medium text-[#5E6AD2] border border-[#5E6AD2]/30 hover:bg-[#5E6AD2]/10 transition"
-                  >
-                    Assign
-                  </button>
-                </TD>
+    <>
+      <div className="hidden md:block">
+        <table className="w-full min-w-[820px] border-collapse">
+            <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+              <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+                <TH className="w-36">Candidate ID</TH>
+                <TH>Name</TH>
+                <TH>Role</TH>
+                <TH className="w-32">Added</TH>
+                <TH>Email</TH>
+                <TH>Recruiter</TH>
+                <TH className="w-24"></TH>
               </tr>
-            )
-          })}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const bg  = unassignedRowBg(row.created_at)
+                const age = daysSince(row.created_at)
+                return (
+                  <tr
+                    key={row.id}
+                    className={`border-b border-[#F0F0F4] hover:opacity-90 transition-colors ${bg}`}
+                  >
+                    <TD className="font-mono text-xs text-[#999] whitespace-nowrap">{row.id}</TD>
+                    <TD>
+                      <span
+                        onClick={(e) => { e.stopPropagation(); onSelect(row) }}
+                        className="font-medium text-[#0F0F12] block truncate max-w-[160px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
+                      >{row.name}</span>
+                    </TD>
+                    <TD>
+                      <span className="text-[#666] block truncate max-w-[140px]">{row.skill_role ?? '—'}</span>
+                    </TD>
+                    <TD>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-[#666]">{formatRelativeDate(row.created_at)}</span>
+                        {age >= 7 && (
+                          <span className={`text-xs font-medium ${age >= 14 ? 'text-red-600' : 'text-amber-600'}`}>
+                            {age}d
+                          </span>
+                        )}
+                      </div>
+                    </TD>
+                    <TD>
+                      <span className="text-xs text-[#666] block truncate max-w-[160px]">{row.email ?? '—'}</span>
+                    </TD>
+                    <TD>
+                      <span className="text-[#666] block truncate max-w-[110px]">{row.profiles?.name ?? '—'}</span>
+                    </TD>
+                    <TD onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => onAssign({ id: row.id, name: row.name })}
+                        className="h-6 px-2.5 rounded text-xs font-medium text-[#5E6AD2] border border-[#5E6AD2]/30 hover:bg-[#5E6AD2]/10 transition"
+                      >
+                        Assign
+                      </button>
+                    </TD>
+                  </tr>
+                )
+              })}
+            </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden">
+        {rows.map((row) => {
+          const age = daysSince(row.created_at)
+          return (
+            <CandidateCard
+              key={row.id}
+              onClick={() => onSelect(row)}
+              applicantId={row.id}
+              name={row.name}
+              rowBg={unassignedRowBg(row.created_at)}
+              aging={age >= 7 ? (
+                <span className={`text-xs font-medium ${age >= 14 ? 'text-red-600' : 'text-amber-600'}`}>{age}d</span>
+              ) : null}
+              detailLines={[
+                row.skill_role,
+                row.email,
+                row.profiles?.name ? `Recruiter: ${row.profiles.name}` : null,
+                `Added ${formatRelativeDate(row.created_at)}`,
+              ].filter(Boolean)}
+            />
+          )
+        })}
+      </div>
+    </>
   )
 }
 
@@ -842,30 +941,57 @@ function AllCandidatesTable({ rows, loading, onSelect, onRefresh }) {
   if (rows.length === 0) return <EmptyState message="No candidates found" />
 
   return (
-    <table className="w-full min-w-[960px] border-collapse">
-        <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
-          <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
-            <TH>Candidate</TH>
-            <TH>Role</TH>
-            <TH>Client · Mandate</TH>
-            <TH className="w-28">Stage</TH>
-            <TH className="w-36">Status</TH>
-            <TH>Recruiter</TH>
-            <TH className="w-20">Exp</TH>
-            <TH className="w-28">Added</TH>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <AllCandidateRow
+    <>
+      <div className="hidden md:block">
+        <table className="w-full min-w-[960px] border-collapse">
+            <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+              <tr className="border-b border-[#F0F0F4] bg-[#FAFAFA]">
+                <TH>Candidate</TH>
+                <TH>Role</TH>
+                <TH>Client · Mandate</TH>
+                <TH className="w-28">Stage</TH>
+                <TH className="w-36">Status</TH>
+                <TH>Recruiter</TH>
+                <TH className="w-20">Exp</TH>
+                <TH className="w-28">Added</TH>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <AllCandidateRow
+                  key={row.id}
+                  row={row}
+                  onSelect={onSelect}
+                  onRefresh={onRefresh}
+                />
+              ))}
+            </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden">
+        {rows.map((row) => {
+          const mc = latestMC(row)
+          return (
+            <CandidateCard
               key={row.id}
-              row={row}
-              onSelect={onSelect}
-              onRefresh={onRefresh}
+              onClick={() => onSelect(row)}
+              applicantId={row.id}
+              name={row.name}
+              meta={[mc?.mandates?.clients?.name, mc?.mandates?.title].filter(Boolean).join(' · ') || undefined}
+              stage={mc?.stage}
+              status={mc?.status}
+              detailLines={[
+                row.skill_role,
+                row.profiles?.name ? `Recruiter: ${row.profiles.name}` : null,
+                row.total_exp != null ? `Exp: ${row.total_exp} yrs` : null,
+                `Added ${formatRelativeDate(row.created_at)}`,
+              ].filter(Boolean)}
             />
-          ))}
-        </tbody>
-    </table>
+          )
+        })}
+      </div>
+    </>
   )
 }
 
@@ -1143,7 +1269,7 @@ export default function Pipeline() {
 
         {/* AM view-mode toggle */}
         {isAccountManager && (
-          <div className="px-6 pt-3 pb-0 flex items-center gap-2">
+          <div className="px-4 sm:px-6 pt-3 pb-0 flex items-center gap-2 overflow-x-auto">
             <span className="text-xs text-[#999] font-medium mr-1">View:</span>
             {[
               { id: 'my_submissions', label: 'My Submissions' },
@@ -1165,12 +1291,12 @@ export default function Pipeline() {
         )}
 
         {/* Tab bar */}
-        <div className="px-6 border-b border-[#F0F0F4] bg-white flex items-center gap-1 shrink-0 mt-1">
+        <div className="px-4 sm:px-6 border-b border-[#F0F0F4] bg-white flex items-center gap-1 shrink-0 mt-1 overflow-x-auto">
           {TABS.map(({ id, label }) => (
             <button
               key={id}
               onClick={() => handleTabChange(id)}
-              className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+              className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === id
                   ? 'border-[#5E6AD2] text-[#5E6AD2]'
                   : 'border-transparent text-[#999] hover:text-[#666]'
@@ -1182,9 +1308,9 @@ export default function Pipeline() {
         </div>
 
         {/* Filter bar */}
-        <div className="px-6 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
+        <div className="px-4 sm:px-6 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
           {/* Search — all tabs */}
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <svg
               className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none"
               viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
@@ -1201,7 +1327,7 @@ export default function Pipeline() {
               }
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-56"
+              className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-full sm:w-56"
             />
           </div>
 

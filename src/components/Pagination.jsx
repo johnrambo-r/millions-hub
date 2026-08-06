@@ -31,10 +31,10 @@ export default function Pagination({ total, page, perPage = 50, onChange }) {
   }
 
   return (
-    <div className="px-6 py-3 border-t border-[#F0F0F4] bg-white flex items-center justify-between gap-4 shrink-0">
+    <div className="px-4 sm:px-6 py-3 border-t border-[#F0F0F4] bg-white flex items-center justify-between gap-4 flex-wrap shrink-0">
       <span className="text-xs text-[#999]">{start}–{end} of {total}</span>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 overflow-x-auto">
         {/* Previous */}
         <button
           onClick={() => onChange(page - 1)}
@@ -77,7 +77,7 @@ export default function Pagination({ total, page, perPage = 50, onChange }) {
         </button>
 
         {/* Jump to */}
-        <div className="flex items-center gap-1.5 ml-2">
+        <div className="hidden sm:flex items-center gap-1.5 ml-2">
           <span className="text-xs text-[#999]">Go to</span>
           <input
             type="text"
