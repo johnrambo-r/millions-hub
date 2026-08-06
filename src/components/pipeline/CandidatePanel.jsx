@@ -231,6 +231,12 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   const resumeFileRef = useRef(null)
   const originalFieldsRef = useRef({})
 
+  // Resume viewing — the resumes bucket is private, so opening a resume
+  // means minting a short-lived signed URL on click, not linking straight
+  // to a stored URL.
+  const [viewingResume, setViewingResume] = useState(false)
+  const [resumeViewError, setResumeViewError] = useState('')
+
   // Mandates section
   const [linkedMandates, setLinkedMandates] = useState([])
   const [mandatesLoading, setMandatesLoading] = useState(false)
@@ -683,13 +689,21 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
   const linkedMandateIds = new Set(linkedMandates.map((mc) => mc.mandate_id))
 
-  const resumeUrl = candidate?.resume_url?.startsWith('http')
-    ? candidate.resume_url
-    : candidate?.resume_url
-      ? supabase.storage.from('resumes').getPublicUrl(candidate.resume_url).data.publicUrl
-      : null
+  const resumeStoragePath = extractStoragePath(candidate?.resume_url)
+  const isPdf = candidate?.resume_url ? /\.pdf(\?|$)/i.test(candidate.resume_url) : false
 
-  const isPdf = resumeUrl ? /\.pdf(\?|$)/i.test(resumeUrl) : false
+  async function handleViewResume() {
+    if (!resumeStoragePath) return
+    setViewingResume(true)
+    setResumeViewError('')
+    const { data, error } = await supabase.storage.from('resumes').createSignedUrl(resumeStoragePath, 300)
+    setViewingResume(false)
+    if (error || !data?.signedUrl) {
+      setResumeViewError('Could not open resume. Please try again.')
+      return
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
 
   return (
     <>
@@ -1391,13 +1405,14 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
             </>
           )}
 
-          {/* Resume actions — shown whenever a valid resume URL can be resolved */}
-          {resumeUrl && (
+          {/* Resume actions — shown whenever a stored resume path can be resolved */}
+          {resumeStoragePath && (
             <div>
               <button
                 type="button"
-                onClick={() => window.open(resumeUrl, '_blank', 'noopener,noreferrer')}
-                className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-[#5E6AD2] text-sm font-medium text-[#5E6AD2] hover:bg-[#5E6AD2]/5 transition"
+                onClick={handleViewResume}
+                disabled={viewingResume}
+                className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-[#5E6AD2] text-sm font-medium text-[#5E6AD2] hover:bg-[#5E6AD2]/5 disabled:opacity-50 transition"
               >
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
                   {isPdf ? (
@@ -1412,8 +1427,9 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                     </>
                   )}
                 </svg>
-                View Resume
+                {viewingResume ? 'Opening…' : 'View Resume'}
               </button>
+              {resumeViewError && <p className="text-xs text-[#D93025] mt-1.5">{resumeViewError}</p>}
             </div>
           )}
 
