@@ -175,6 +175,75 @@ function SelectFilter({ value, onChange, placeholder, children }) {
   )
 }
 
+// Mobile-only compact filter control: a pill showing the current selection
+// (or its label when unset) that opens a small dropdown anchored below it.
+function FilterPill({ title, value, options, onSelect }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    function onKey(e) { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const selected = options.find((o) => o.value === value)
+  const shown = selected ? selected.label : title
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`h-8 max-w-[140px] px-3 rounded-full text-xs font-medium whitespace-nowrap truncate border transition ${
+          value
+            ? 'bg-[#5E6AD2]/10 border-[#5E6AD2]/40 text-[#5E6AD2]'
+            : 'bg-white border-[#E0E0E8] text-[#666]'
+        }`}
+      >
+        {shown}
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-20 bg-white border border-[#E0E0E8] rounded-lg shadow-lg min-w-[170px] max-h-64 overflow-y-auto">
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); onSelect(''); setOpen(false) }}
+            className={`w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F8] transition-colors whitespace-nowrap ${!value ? 'text-[#5E6AD2] font-medium' : 'text-[#666]'}`}
+          >
+            All {title.toLowerCase()}
+          </button>
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); onSelect(opt.value); setOpen(false) }}
+              className={`w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F8] transition-colors truncate ${opt.value === value ? 'text-[#5E6AD2] font-medium' : 'text-[#0F0F12]'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FunnelIcon({ className }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
+      <path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5L2 3z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 function EmptyState({ message = 'No candidates match the current filters' }) {
   return (
     <div className="flex items-center justify-center py-20 text-sm text-[#999]">{message}</div>
@@ -1307,10 +1376,10 @@ export default function Pipeline() {
           ))}
         </div>
 
-        {/* Filter bar */}
-        <div className="px-4 sm:px-6 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
+        {/* Filter bar — desktop */}
+        <div className="hidden md:flex px-6 py-3 border-b border-[#F0F0F4] bg-white items-center gap-3 flex-wrap shrink-0">
           {/* Search — all tabs */}
-          <div className="relative w-full sm:w-auto">
+          <div className="relative">
             <svg
               className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none"
               viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
@@ -1327,7 +1396,7 @@ export default function Pipeline() {
               }
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-full sm:w-56"
+              className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-56"
             />
           </div>
 
@@ -1380,6 +1449,90 @@ export default function Pipeline() {
           </span>
         </div>
 
+        {/* Filter bar — mobile */}
+        <div className="md:hidden border-b border-[#F0F0F4] bg-white shrink-0">
+          {/* Search */}
+          <div className="px-4 pt-3 pb-2">
+            <div className="relative">
+              <svg
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none"
+                viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
+              >
+                <circle cx="6.5" cy="6.5" r="4.5" />
+                <path d="M10.5 10.5l3 3" strokeLinecap="round" />
+              </svg>
+              <input
+                type="text"
+                placeholder={
+                  isNewLayoutTab ? 'Search name, phone or email…' :
+                  isMCTab        ? 'Search name or role…' :
+                                   'Search name, role or email…'
+                }
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-full"
+              />
+            </div>
+          </div>
+
+          {/* Filter pills — horizontally scrollable */}
+          <div className="flex items-center gap-2 px-4 pb-2 overflow-x-auto">
+            <FunnelIcon className="w-4 h-4 text-[#999] shrink-0" />
+
+            <FilterPill
+              title="Clients"
+              value={clientFilter}
+              onSelect={setClientFilter}
+              options={clients.map((c) => ({ value: c.id, label: c.name }))}
+            />
+
+            {(isMCTab || activeTab === 'all') && (
+              <FilterPill
+                title="Stage"
+                value={stageFilter}
+                onSelect={(v) => { setStageFilter(v); setStatusFilter('') }}
+                options={(isNewLayoutTab ? STAGES : stages).map((s) => ({ value: s, label: s }))}
+              />
+            )}
+
+            {(isMCTab || activeTab === 'all') && (
+              <FilterPill
+                title="Status"
+                value={statusFilter}
+                onSelect={setStatusFilter}
+                options={statusOptions.map((s) => ({ value: s, label: s }))}
+              />
+            )}
+
+            {!isRecruiter && recruiters.length > 0 && (
+              <FilterPill
+                title="Recruiters"
+                value={recruiterFilter}
+                onSelect={setRecruiterFilter}
+                options={recruiters.map((r) => ({ value: r.id, label: r.name }))}
+              />
+            )}
+          </div>
+
+          {/* Clear filters + count */}
+          <div className="flex items-center px-4 pb-2">
+            {hasActiveFilters && (
+              <button
+                onClick={() => {
+                  setSearch(''); setStageFilter(''); setStatusFilter('')
+                  setClientFilter(''); setRecruiterFilter('')
+                }}
+                className="text-xs text-[#5E6AD2] hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+            <span className="text-xs text-[#999] ml-auto">
+              {loading ? '…' : `${filtered.length} candidate${filtered.length !== 1 ? 's' : ''}`}
+            </span>
+          </div>
+        </div>
+
         {/* Error banner */}
         {error && (
           <div className="mx-6 mt-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
@@ -1422,7 +1575,9 @@ export default function Pipeline() {
           )}
         </div>
         {!loading && filtered.length > 0 && (
-          <Pagination total={filtered.length} page={page} onChange={setPage} />
+          <div className="pb-3 md:pb-0">
+            <Pagination total={filtered.length} page={page} onChange={setPage} />
+          </div>
         )}
       </div>
 
