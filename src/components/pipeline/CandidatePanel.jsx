@@ -10,6 +10,7 @@ import { generateApplicantId } from '../../lib/generateApplicantId'
 import useRole from '../../hooks/useRole'
 import { logActivity } from '../../lib/activityLog'
 import { formatTime12h } from '../../lib/formatTime'
+import { createInterviewReminder } from '../../lib/interviewReminders'
 
 function Field({ label, children, colSpan2 = false }) {
   return (
@@ -979,10 +980,10 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                           <button
                             onClick={async () => {
                               setSavingReminder(true)
-                              await supabase.from('interview_reminders').insert({
-                                mandate_candidate_id: mc.id,
-                                lead_time_minutes: reminderLeadTime,
-                                created_by: userId,
+                              await createInterviewReminder(supabase, {
+                                mandateCandidateId: mc.id,
+                                leadTimeMinutes: reminderLeadTime,
+                                createdBy: userId,
                               })
                               setSavingReminder(false)
                               setReminderMcId(null)

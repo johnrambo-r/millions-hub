@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import { createInterviewReminder, cancelActiveInterviewReminders } from '../../lib/interviewReminders'
 
 // ─── StagePromptModal ────────────────────────────────────────────────────────
 // Shown after a stage change to capture optional interview/offer/joining details.
 
-export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}, onClose }) {
+export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}, userId, onClose }) {
   const [saving, setSaving] = useState(false)
   const [interviewDate, setInterviewDate] = useState(existingData.interview_date ?? '')
   const [interviewTime, setInterviewTime] = useState(existingData.interview_time ?? '')
+  const [reminderLeadTime, setReminderLeadTime] = useState('')
   const [offeredCtc, setOfferedCtc] = useState(existingData.offered_ctc ?? '')
   const [billingAmount, setBillingAmount] = useState(existingData.billing_value_approx ?? '')
   const [dateOfJoining, setDateOfJoining] = useState(existingData.date_of_joining ?? '')
@@ -47,10 +49,22 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
     if (Object.keys(updates).length > 0) {
       setSaving(true)
       await supabaseClient.from('mandate_candidates').update(updates).eq('id', mcId)
+
+      if (type === 'interview' && reminderLeadTime) {
+        await cancelActiveInterviewReminders(supabaseClient, mcId)
+        await createInterviewReminder(supabaseClient, {
+          mandateCandidateId: mcId,
+          leadTimeMinutes: Number(reminderLeadTime),
+          createdBy: userId,
+        })
+      }
+
       setSaving(false)
     }
     onClose()
   }
+
+  const interviewMissingFields = type === 'interview' && (!interviewDate || !interviewTime || !reminderLeadTime)
 
   const inputCls = 'h-8 w-full rounded-lg border border-[#F0F0F4] px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
@@ -60,7 +74,7 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-[#0F0F12]">
             {title}
-            {type !== 'invoice' && <>{' '}<span className="text-[#999] font-normal text-xs">(optional)</span></>}
+            {type !== 'invoice' && type !== 'interview' && <>{' '}<span className="text-[#999] font-normal text-xs">(optional)</span></>}
           </h3>
           {type !== 'invoice' && (
             <button onClick={onClose} className="text-[#999] hover:text-[#0F0F12] transition-colors">
@@ -82,12 +96,22 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
           {type === 'interview' && (
             <>
               <label className="block">
-                <span className="text-xs text-[#999] mb-1 block">Interview Date</span>
+                <span className="text-xs text-[#999] mb-1 block">Interview Date <span className="text-red-500">*</span></span>
                 <input type="date" value={interviewDate} onChange={(e) => setInterviewDate(e.target.value)} className={inputCls} />
               </label>
               <label className="block">
-                <span className="text-xs text-[#999] mb-1 block">Interview Time</span>
+                <span className="text-xs text-[#999] mb-1 block">Interview Time <span className="text-red-500">*</span></span>
                 <input type="time" value={interviewTime} onChange={(e) => setInterviewTime(e.target.value)} className={inputCls} />
+              </label>
+              <label className="block">
+                <span className="text-xs text-[#999] mb-1 block">Remind me <span className="text-red-500">*</span></span>
+                <select value={reminderLeadTime} onChange={(e) => setReminderLeadTime(e.target.value)} className={inputCls}>
+                  <option value="">Select lead time…</option>
+                  <option value={15}>15 min before</option>
+                  <option value={30}>30 min before</option>
+                  <option value={60}>1 hour before</option>
+                  <option value={120}>2 hours before</option>
+                </select>
               </label>
             </>
           )}
@@ -148,7 +172,7 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
         <div className="flex items-center gap-2 mt-5">
           <button
             onClick={handleSave}
-            disabled={saving || (type === 'invoice' && (!invoiceDate || !billingValueFinal))}
+            disabled={saving || (type === 'invoice' && (!invoiceDate || !billingValueFinal)) || interviewMissingFields}
             className="h-8 px-4 rounded-lg text-sm font-semibold text-white bg-[#5E6AD2] hover:opacity-90 disabled:opacity-50 transition"
           >
             {saving ? 'Saving…' : 'Save'}

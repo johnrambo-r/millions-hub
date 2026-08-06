@@ -407,6 +407,7 @@ function NewMCRow({ row, onSelect, onRefresh }) {
           mcId={row.id}
           supabaseClient={supabase}
           existingData={row}
+          userId={changedBy}
           onClose={() => { setPrompt(null); onRefresh() }}
         />
       )}
@@ -586,6 +587,7 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
           mcId={row.id}
           supabaseClient={supabase}
           existingData={row}
+          userId={changedBy}
           onClose={() => { setPrompt(null); onRefresh() }}
         />
       )}
@@ -828,6 +830,7 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
           mcId={mc.id}
           supabaseClient={supabase}
           existingData={mc}
+          userId={changedBy}
           onClose={() => { setPrompt(null); onRefresh() }}
         />
       )}
