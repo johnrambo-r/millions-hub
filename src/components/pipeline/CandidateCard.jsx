@@ -8,10 +8,12 @@ import StageStatusSheet from './StageStatusSheet'
 // statusOptions + onStageSelect/onStatusSelect are provided, the stage/status
 // badges are independently tappable (own bottom sheet, doesn't also open the
 // panel) — omit them to keep a badge read-only (e.g. Unassigned candidates
-// have no stage/status at all).
+// have no stage/status at all). interviewButton is an optional node (an
+// <InterviewTimeButton/>) rendered next to the stage badge, matching desktop's
+// placement — pass null/undefined to omit it.
 export default function CandidateCard({
   onClick, applicantId, name, meta, stage, status, detailLines, aging, rowBg = '',
-  stageOptions, statusOptions, onStageSelect, onStatusSelect,
+  stageOptions, statusOptions, onStageSelect, onStatusSelect, interviewButton,
 }) {
   const [sheet, setSheet] = useState(null) // 'stage' | 'status' | null
 
@@ -48,6 +50,7 @@ export default function CandidateCard({
               <StageBadge value={stage} />
             )
           )}
+          {interviewButton}
           {status && (
             onStatusSelect && statusOptions?.length > 0 ? (
               <button

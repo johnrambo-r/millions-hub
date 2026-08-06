@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom'
 import Pagination from '../components/Pagination'
 import AppShell from '../components/layout/AppShell'
 import { StageBadge, StatusBadge } from '../components/pipeline/StageBadge'
-import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineStageStatus'
+import { InlineDropdown, StagePromptModal, InterviewTimeButton } from '../components/pipeline/InlineStageStatus'
 import CandidateCard from '../components/pipeline/CandidateCard'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
 import AssignMandateModal from '../components/AssignMandateModal'
@@ -81,24 +81,6 @@ const L2_ABOVE_STAGES = STAGES.slice(STAGES.indexOf('L2'))
 const ALL_STATUSES_FLAT = [...new Set(Object.values(STAGE_STATUS_MAP).flat())].sort()
 
 // ─── helpers ────────────────────────────────────────────────────────────────
-
-// Standalone entry point for adding/editing a candidate's interview date & time
-// without going through a stage change. Only shown for interview-eligible stages.
-function InterviewTimeButton({ stage, hasTime, onClick }) {
-  if (!INTERVIEW_STAGES.has(stage)) return null
-  return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onClick() }}
-      className="text-[#999] hover:text-[#5E6AD2] transition-colors shrink-0"
-      title={hasTime ? 'Edit interview time' : 'Add interview time'}
-    >
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
-        <rect x="2" y="3" width="12" height="11" rx="1.5" />
-        <path d="M2 6.5h12M5 1.5v3M11 1.5v3" strokeLinecap="round" />
-      </svg>
-    </button>
-  )
-}
 
 function daysSince(dateStr) {
   if (!dateStr) return 0
@@ -561,6 +543,13 @@ function NewMCCardRow({ row, onSelect, onRefresh }) {
         statusOptions={statusOptions}
         onStageSelect={handleStageSelect}
         onStatusSelect={handleStatusSelect}
+        interviewButton={
+          <InterviewTimeButton
+            stage={stage}
+            hasTime={!!row.interview_date}
+            onClick={() => setPrompt({ type: 'interview' })}
+          />
+        }
         aging={<InStageBadge dateStr={row.status_changed_at} />}
         rowBg={noShowRowBg({ status, status_changed_at: row.status_changed_at })}
         detailLines={[
@@ -813,6 +802,13 @@ function MCCardRow({ row, onSelect, onRefresh }) {
         statusOptions={statusOptions}
         onStageSelect={handleStageSelect}
         onStatusSelect={handleStatusSelect}
+        interviewButton={
+          <InterviewTimeButton
+            stage={stage}
+            hasTime={!!row.interview_date}
+            onClick={() => setPrompt({ type: 'interview' })}
+          />
+        }
         detailLines={[
           c.skill_role,
           row.linked_by_profile?.name ? `Recruiter: ${row.linked_by_profile.name}` : null,
@@ -1156,6 +1152,15 @@ function AllCandidateCardRow({ row, onSelect, onRefresh }) {
         statusOptions={mc ? statusOptions : []}
         onStageSelect={mc ? handleStageSelect : undefined}
         onStatusSelect={mc ? handleStatusSelect : undefined}
+        interviewButton={
+          mc ? (
+            <InterviewTimeButton
+              stage={stage}
+              hasTime={!!mc.interview_date}
+              onClick={() => setPrompt({ type: 'interview' })}
+            />
+          ) : null
+        }
         detailLines={[
           row.skill_role,
           row.profiles?.name ? `Recruiter: ${row.profiles.name}` : null,

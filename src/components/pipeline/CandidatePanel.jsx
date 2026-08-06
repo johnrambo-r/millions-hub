@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { StageBadge, StatusBadge } from './StageBadge'
-import { InlineDropdown, StagePromptModal } from './InlineStageStatus'
+import { InlineDropdown, StagePromptModal, InterviewTimeButton } from './InlineStageStatus'
 import StageStatusSheet from './StageStatusSheet'
 import {
   QUALIFICATIONS, PASSING_YEARS, NOTICE_PERIODS,
@@ -821,6 +821,11 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                           >
                             <StageBadge value={mc.stage || null} />
                           </button>
+                          <InterviewTimeButton
+                            stage={mc.stage}
+                            hasTime={!!mc.interview_date}
+                            onClick={() => setStagePrompt({ mcId: mc.id, type: 'interview' })}
+                          />
                           <button
                             type="button"
                             disabled={!mc.stage}

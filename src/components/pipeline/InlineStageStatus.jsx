@@ -1,5 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
 import { createInterviewReminder, cancelActiveInterviewReminders } from '../../lib/interviewReminders'
+import { INTERVIEW_STAGES } from '../../lib/candidateConstants'
+
+// ─── InterviewTimeButton ─────────────────────────────────────────────────────
+// Calendar-icon control next to a stage badge: opens StagePromptModal(type:
+// 'interview') directly, without requiring a stage change. Shared by desktop
+// table rows, mobile cards, and CandidatePanel so there's one calendar icon
+// and one trigger path into the shared modal, not a rebuild per surface.
+
+export function InterviewTimeButton({ stage, hasTime, onClick }) {
+  if (!INTERVIEW_STAGES.has(stage)) return null
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      className="text-[#999] hover:text-[#5E6AD2] transition-colors shrink-0"
+      title={hasTime ? 'Edit interview time' : 'Add interview time'}
+    >
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+        <rect x="2" y="3" width="12" height="11" rx="1.5" />
+        <path d="M2 6.5h12M5 1.5v3M11 1.5v3" strokeLinecap="round" />
+      </svg>
+    </button>
+  )
+}
 
 // ─── StagePromptModal ────────────────────────────────────────────────────────
 // Shown after a stage change to capture optional interview/offer/joining details.
