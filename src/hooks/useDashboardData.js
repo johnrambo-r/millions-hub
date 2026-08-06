@@ -92,7 +92,7 @@ export function useDashboardData(profile) {
 
       const todayStr    = localDateStr()
       const tomorrowStr = localDateStr(new Date(Date.now() + 86400000))
-      const next7Str    = localDateStr(new Date(Date.now() + 6 * 86400000))
+      const next7Str    = localDateStr(new Date(Date.now() + 7 * 86400000))
 
       const interviewsToday = rows.filter(
         (r) => r.interview_date?.slice(0, 10) === todayStr
@@ -104,7 +104,7 @@ export function useDashboardData(profile) {
 
       const interviewsNext7Days = rows.filter((r) => {
         const d = r.interview_date?.slice(0, 10)
-        return !!d && d >= todayStr && d <= next7Str
+        return !!d && d >= tomorrowStr && d <= next7Str
       })
 
       const cvFeedbackOverdue = rows
