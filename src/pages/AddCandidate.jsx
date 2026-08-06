@@ -35,7 +35,7 @@ const INITIAL = {
   source: '', comments: '',
 }
 
-function validate(f, resumeFile) {
+function validate(f, resumeUpload) {
   const e = {}
   if (!f.name.trim())               e.name             = 'Required'
   if (!f.email.trim())              e.email            = 'Required'
@@ -61,7 +61,12 @@ function validate(f, resumeFile) {
   if (!f.source)                    e.source           = 'Required'
   if (f.emp_mode === 'Contract' && !f.payroll_company.trim())
                                     e.payroll_company  = 'Required for contract'
-  if (!resumeFile)                  e.resume           = 'Resume is required'
+  if (resumeUpload.status !== 'done' || !resumeUpload.url) {
+    e.resume =
+      resumeUpload.status === 'uploading' ? 'Resume is still uploading — please wait' :
+      resumeUpload.status === 'error'     ? 'Resume upload failed — please retry' :
+                                             'Resume is required'
+  }
   return e
 }
 
@@ -127,6 +132,14 @@ export default function AddCandidate() {
   const [assignTarget, setAssignTarget] = useState(null)
   const [appIdToast, setAppIdToast] = useState('')
   const [resumeFile, setResumeFile] = useState(null)
+  // Upload starts the moment a file is selected, not at submit time, so
+  // Submit can be blocked for the entire window a resume is in flight
+  // instead of racing it. 'idle' | 'uploading' | 'done' | 'error'.
+  const [resumeUploadStatus, setResumeUploadStatus] = useState('idle')
+  const [resumeUploadError, setResumeUploadError]   = useState('')
+  const [resumeUploadPath, setResumeUploadPath]     = useState(null)
+  const [resumeUploadUrl, setResumeUploadUrl]       = useState(null)
+  const resumeUploadTokenRef      = useRef(0) // guards against a stale upload clobbering a newer one
   const [fileKey, setFileKey]     = useState(0)
   const fileInputRef              = useRef(null)
   const [formError, setFormError] = useState('')
@@ -150,8 +163,52 @@ export default function AddCandidate() {
     setErrors((p) => ({ ...p, emp_mode: undefined, payroll_company: undefined }))
   }
 
+  // Uploads to a path independent of any candidate ID — at this point in the
+  // flow no candidate row exists yet, and generating one early to get an
+  // ID would burn a sequence number for candidates that never get created
+  // (the exact problem 20260713020000_atomic_candidate_insert.sql fixed).
+  async function uploadResume(file) {
+    const token = ++resumeUploadTokenRef.current
+    setResumeUploadStatus('uploading')
+    setResumeUploadError('')
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')
+    const filePath = `pending/${crypto.randomUUID()}-${safeName}`
+    const { error: uploadError } = await supabase.storage.from('resumes').upload(filePath, file)
+
+    if (token !== resumeUploadTokenRef.current) return // superseded by a newer file selection
+
+    if (uploadError) {
+      setResumeUploadStatus('error')
+      setResumeUploadError(uploadError.message || 'Resume upload failed')
+      return
+    }
+
+    const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
+    setResumeUploadPath(filePath)
+    setResumeUploadUrl(urlData.publicUrl)
+    setResumeUploadStatus('done')
+  }
+
+  function handleResumeFileChange(file) {
+    const previousPath = resumeUploadPath
+    resumeUploadTokenRef.current++ // invalidate any upload already in flight
+
+    setResumeFile(file)
+    setErrors((p) => ({ ...p, resume: undefined }))
+    setResumeUploadPath(null)
+    setResumeUploadUrl(null)
+    setResumeUploadError('')
+    setResumeUploadStatus(file ? 'uploading' : 'idle')
+
+    if (previousPath) {
+      supabase.storage.from('resumes').remove([previousPath]).catch(() => {}) // best-effort cleanup, not user-facing
+    }
+    if (file) uploadResume(file)
+  }
+
   async function submitCandidate(force = false) {
-    const errs = validate(form, resumeFile)
+    const errs = validate(form, { status: resumeUploadStatus, url: resumeUploadUrl })
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
       setTimeout(() => {
@@ -241,6 +298,12 @@ export default function AddCandidate() {
       reason_for_looking: form.reason_for_looking.trim() || null,
       source:             form.source,
       comments:           form.comments.trim() || null,
+      // The resume is already fully uploaded by this point (Submit is
+      // disabled until resumeUploadStatus === 'done'), so its URL goes into
+      // the same insert as everything else — create_candidate() rejects the
+      // row server-side if this is missing, so there's no window where a
+      // candidate can exist without one.
+      resume_url: resumeUploadUrl,
     }
 
     const { data: newCandidate, error: insertError } = await supabase.rpc('create_candidate', { payload })
@@ -251,24 +314,15 @@ export default function AddCandidate() {
       return { success: false, reason: 'insert' }
     }
 
-    const newCandidateId = newCandidate.id
-
-    if (resumeFile) {
-      const filePath = `${newCandidateId}/${resumeFile.name}`
-      const { error: uploadError } = await supabase.storage.from('resumes').upload(filePath, resumeFile)
-      if (uploadError) {
-        console.warn('[AddCandidate] resume upload failed:', uploadError.message)
-      } else {
-        const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
-        await supabase.from('candidates').update({ resume_url: urlData.publicUrl }).eq('id', newCandidateId)
-      }
-    }
-
-    const addedId   = newCandidateId
+    const addedId   = newCandidate.id
     const addedName = form.name.trim()
     setForm(INITIAL)
     setErrors({})
     setResumeFile(null)
+    setResumeUploadStatus('idle')
+    setResumeUploadError('')
+    setResumeUploadPath(null)
+    setResumeUploadUrl(null)
     setFileKey((k) => k + 1)
     setSubmitting(false)
     setPostAdd({ id: addedId, name: addedName })
@@ -456,10 +510,7 @@ export default function AddCandidate() {
                 type="file"
                 accept=".pdf,.doc,.docx"
                 className="hidden"
-                onChange={(e) => {
-                  setResumeFile(e.target.files[0] ?? null)
-                  setErrors((p) => ({ ...p, resume: undefined }))
-                }}
+                onChange={(e) => handleResumeFileChange(e.target.files[0] ?? null)}
               />
               <div className="flex items-center gap-3 h-9">
                 <button
@@ -479,6 +530,26 @@ export default function AddCandidate() {
                 </button>
                 <span className="text-sm text-[#999] truncate">{resumeFile ? resumeFile.name : '.pdf, .doc, .docx'}</span>
               </div>
+              {resumeUploadStatus === 'uploading' && (
+                <p className="text-xs text-[#5E6AD2] mt-1.5 flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" fill="none" className="w-3 h-3 animate-spin shrink-0">
+                    <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+                    <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  Uploading resume…
+                </p>
+              )}
+              {resumeUploadStatus === 'error' && (
+                <p className="text-xs text-[#D93025] mt-1.5">
+                  {resumeUploadError || 'Resume upload failed'}{' '}
+                  <button type="button" onClick={() => resumeFile && uploadResume(resumeFile)} className="underline hover:no-underline">
+                    Retry
+                  </button>
+                </p>
+              )}
+              {resumeUploadStatus === 'done' && (
+                <p className="text-xs text-green-700 mt-1.5">Resume uploaded</p>
+              )}
             </FormField>
           </FormSection>
 
@@ -493,11 +564,11 @@ export default function AddCandidate() {
           <div className="flex justify-end pt-2">
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || resumeUploadStatus === 'uploading' || resumeUploadStatus === 'error'}
               className="h-10 px-6 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: '#5E6AD2' }}
             >
-              {submitting ? 'Saving…' : 'Add candidate'}
+              {submitting ? 'Saving…' : resumeUploadStatus === 'uploading' ? 'Uploading resume…' : 'Add candidate'}
             </button>
           </div>
         </form>
