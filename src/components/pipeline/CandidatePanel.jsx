@@ -3,9 +3,10 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { StageBadge, StatusBadge } from './StageBadge'
 import { InlineDropdown, StagePromptModal } from './InlineStageStatus'
+import StageStatusSheet from './StageStatusSheet'
 import {
   QUALIFICATIONS, PASSING_YEARS, NOTICE_PERIODS,
-  STAGE_STATUS_MAP, INTERVIEW_STAGES, getNextStageOptions, getAllStageOptions,
+  STAGE_STATUS_MAP, getNextStageOptions, getAllStageOptions,
 } from '../../lib/candidateConstants'
 import UnsavedChangesModal from '../UnsavedChangesModal'
 import { generateApplicantId } from '../../lib/generateApplicantId'
@@ -13,6 +14,7 @@ import useRole from '../../hooks/useRole'
 import { logActivity } from '../../lib/activityLog'
 import { formatTime12h } from '../../lib/formatTime'
 import { createInterviewReminder } from '../../lib/interviewReminders'
+import { changeStage, changeStatus, promptTypeForStage, promptTypeForStatus } from '../../lib/stageStatus'
 
 function Field({ label, children, colSpan2 = false }) {
   return (
@@ -235,6 +237,9 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   // Inline stage/status editing (same logic/permissions as the Pipeline table view)
   const [stagePrompt, setStagePrompt] = useState(null)
 
+  // Mobile stage/status bottom sheet — { mcId, kind: 'stage' | 'status' }
+  const [mobileStageStatusSheet, setMobileStageStatusSheet] = useState(null)
+
   // Interview reschedule (all roles)
   const [reschedulingMcId, setReschedulingMcId] = useState(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
@@ -419,39 +424,25 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
   async function handleMcStageChange(mc, newStage) {
     const oldStage  = mc.stage
     const oldStatus = mc.status
-    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
 
-    await supabase.from('mandate_candidates')
-      .update({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
-      .eq('id', mc.id)
+    await changeStage({
+      mcId: mc.id, candidateId: candidate.id, mandateId: mc.mandate_id, applicantId: mc.applicant_id,
+      oldStage, oldStatus, newStage, changedBy: userId,
+    })
 
-    await logActivity({ candidateId: candidate.id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy: userId, changeType: 'stage', oldValue: oldStage, newValue: newStage })
-    if (oldStatus !== newStatus) {
-      await logActivity({ candidateId: candidate.id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy: userId, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    }
-
-    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
-      setStagePrompt({ mcId: mc.id, type: 'assessment' })
-    } else if (INTERVIEW_STAGES.has(newStage)) {
-      setStagePrompt({ mcId: mc.id, type: 'interview' })
-    } else if (newStage === 'Offer') {
-      setStagePrompt({ mcId: mc.id, type: 'offer' })
-    } else if (newStage === 'Joining') {
-      setStagePrompt({ mcId: mc.id, type: 'joining' })
-    } else {
-      loadLinkedMandates(candidate.id)
-    }
+    const type = promptTypeForStage(newStage)
+    if (type) setStagePrompt({ mcId: mc.id, type }); else loadLinkedMandates(candidate.id)
   }
 
   async function handleMcStatusChange(mc, newStatus) {
     const oldStatus = mc.status
-    await supabase.from('mandate_candidates').update({ status: newStatus, status_changed_at: new Date().toISOString() }).eq('id', mc.id)
-    await logActivity({ candidateId: candidate.id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy: userId, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    if (newStatus === 'Invoice Raised') {
-      setStagePrompt({ mcId: mc.id, type: 'invoice' })
-    } else {
-      loadLinkedMandates(candidate.id)
-    }
+    await changeStatus({
+      mcId: mc.id, candidateId: candidate.id, mandateId: mc.mandate_id, applicantId: mc.applicant_id,
+      oldStatus, newStatus, changedBy: userId,
+    })
+
+    const type = promptTypeForStatus(newStatus)
+    if (type) setStagePrompt({ mcId: mc.id, type }); else loadLinkedMandates(candidate.id)
   }
 
   function resetEditState() {
@@ -783,6 +774,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                     (r) => !r.fired_at && !r.cancelled_at
                   ) ?? null
                   const canScheduleReminder = !!(mc.interview_date && mc.interview_time)
+                  const mcStageOptions = isFounder ? getAllStageOptions(mc.stage) : getNextStageOptions(mc.stage)
+                  const mcStatusOptions = mc.stage ? (STAGE_STATUS_MAP[mc.stage] ?? []) : []
                   return (
                     <li key={mc.id} className="rounded-lg border border-[#F0F0F4] px-3 py-3">
                       <div className="flex items-start justify-between gap-2">
@@ -800,21 +793,34 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                        {/* Mobile: view-only badges */}
+                        {/* Mobile: tappable badges -> bottom sheet */}
                         <span className="md:hidden inline-flex items-center gap-1.5 flex-wrap">
-                          <StageBadge value={mc.stage || null} />
-                          <StatusBadge value={mc.status || null} />
+                          <button
+                            type="button"
+                            className="active:opacity-60 transition-opacity"
+                            onClick={(e) => { e.stopPropagation(); setMobileStageStatusSheet({ mcId: mc.id, kind: 'stage' }) }}
+                          >
+                            <StageBadge value={mc.stage || null} />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!mc.stage}
+                            className="active:opacity-60 transition-opacity disabled:opacity-50"
+                            onClick={(e) => { e.stopPropagation(); setMobileStageStatusSheet({ mcId: mc.id, kind: 'status' }) }}
+                          >
+                            <StatusBadge value={mc.status || null} />
+                          </button>
                         </span>
                         {/* Desktop: editable dropdowns */}
                         <span className="hidden md:inline-flex items-center gap-1.5">
                           <InlineDropdown
                             badge={<StageBadge value={mc.stage || null} />}
-                            options={isFounder ? getAllStageOptions(mc.stage) : getNextStageOptions(mc.stage)}
+                            options={mcStageOptions}
                             onSelect={(newStage) => handleMcStageChange(mc, newStage)}
                           />
                           <InlineDropdown
                             badge={<StatusBadge value={mc.status || null} />}
-                            options={mc.stage ? (STAGE_STATUS_MAP[mc.stage] ?? []) : []}
+                            options={mcStatusOptions}
                             onSelect={(newStatus) => handleMcStatusChange(mc, newStatus)}
                             disabled={!mc.stage}
                           />
@@ -1073,6 +1079,24 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                           existingData={mc}
                           userId={userId}
                           onClose={() => { setStagePrompt(null); loadLinkedMandates(candidate.id) }}
+                        />
+                      )}
+                      {mobileStageStatusSheet?.mcId === mc.id && mobileStageStatusSheet.kind === 'stage' && (
+                        <StageStatusSheet
+                          title="Stage"
+                          value={mc.stage}
+                          options={mcStageOptions}
+                          onSelect={(newStage) => handleMcStageChange(mc, newStage)}
+                          onClose={() => setMobileStageStatusSheet(null)}
+                        />
+                      )}
+                      {mobileStageStatusSheet?.mcId === mc.id && mobileStageStatusSheet.kind === 'status' && (
+                        <StageStatusSheet
+                          title="Status"
+                          value={mc.status}
+                          options={mcStatusOptions}
+                          onSelect={(newStatus) => handleMcStatusChange(mc, newStatus)}
+                          onClose={() => setMobileStageStatusSheet(null)}
                         />
                       )}
                     </li>

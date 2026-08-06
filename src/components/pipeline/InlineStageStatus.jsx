@@ -66,11 +66,17 @@ export function StagePromptModal({ type, mcId, supabaseClient, existingData = {}
 
   const interviewMissingFields = type === 'interview' && (!interviewDate || !interviewTime || !reminderLeadTime)
 
-  const inputCls = 'h-8 w-full rounded-lg border border-[#F0F0F4] px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
+  const inputCls = 'h-10 md:h-8 w-full rounded-lg border border-[#F0F0F4] px-3 text-sm text-[#0F0F12] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition'
 
   return (
-    <div className="fixed inset-0 bg-black/30 z-[70] flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+    <div
+      className="fixed inset-0 bg-black/30 z-[70] flex items-end md:items-center justify-center p-0 md:p-4"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div
+        className="bg-white w-full md:max-w-sm rounded-t-2xl md:rounded-xl shadow-xl p-6 max-h-[85vh] overflow-y-auto"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-[#0F0F12]">
             {title}

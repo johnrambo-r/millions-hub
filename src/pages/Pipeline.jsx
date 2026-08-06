@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activityLog'
 import { formatTime12h } from '../lib/formatTime'
+import { changeStage, changeStatus, promptTypeForStage, promptTypeForStatus } from '../lib/stageStatus'
 import {
   STAGES,
   STAGE_STATUS_MAP,
@@ -329,44 +330,28 @@ function NewMCRow({ row, onSelect, onRefresh }) {
   async function handleStageChange(newStage) {
     const oldStage  = stage
     const oldStatus = status
-    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
 
+    const newStatus = await changeStage({
+      mcId: row.id, candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id,
+      oldStage, oldStatus, newStage, changedBy,
+    })
     setStage(newStage)
     setStatus(newStatus ?? '')
 
-    await supabase.from('mandate_candidates')
-      .update({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
-      .eq('id', row.id)
-
-    await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'stage', oldValue: oldStage, newValue: newStage })
-    if (oldStatus !== newStatus) {
-      await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    }
-
-    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
-      setPrompt({ type: 'assessment' })
-    } else if (INTERVIEW_STAGES.has(newStage)) {
-      setPrompt({ type: 'interview' })
-    } else if (newStage === 'Offer') {
-      setPrompt({ type: 'offer' })
-    } else if (newStage === 'Joining') {
-      setPrompt({ type: 'joining' })
-    } else {
-      onRefresh()
-    }
+    const type = promptTypeForStage(newStage)
+    if (type) setPrompt({ type }); else onRefresh()
   }
 
   async function handleStatusChange(newStatus) {
     const oldStatus = status
+    await changeStatus({
+      mcId: row.id, candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id,
+      oldStatus, newStatus, changedBy,
+    })
     setStatus(newStatus)
 
-    await supabase.from('mandate_candidates').update({ status: newStatus, status_changed_at: new Date().toISOString() }).eq('id', row.id)
-    await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    if (newStatus === 'Invoice Raised') {
-      setPrompt({ type: 'invoice' })
-    } else {
-      onRefresh()
-    }
+    const type = promptTypeForStatus(newStatus)
+    if (type) setPrompt({ type }); else onRefresh()
   }
 
   const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
@@ -522,6 +507,83 @@ function NewMCRow({ row, onSelect, onRefresh }) {
   )
 }
 
+// Mobile card equivalent of NewMCRow — same shared mutation logic
+// (changeStage/changeStatus) and the same StagePromptModal trigger rules,
+// just thinner since the write path itself lives in src/lib/stageStatus.js.
+function NewMCCardRow({ row, onSelect, onRefresh }) {
+  const { session } = useAuth()
+  const { isFounder } = useRole()
+  const [stage, setStage]   = useState(row.stage ?? '')
+  const [status, setStatus] = useState(row.status ?? '')
+  const [prompt, setPrompt] = useState(null)
+
+  const c         = row.candidates ?? {}
+  const changedBy = session?.user?.id
+
+  async function handleStageSelect(newStage) {
+    const oldStage  = stage
+    const oldStatus = status
+    const newStatus = await changeStage({
+      mcId: row.id, candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id,
+      oldStage, oldStatus, newStage, changedBy,
+    })
+    setStage(newStage)
+    setStatus(newStatus ?? '')
+
+    const type = promptTypeForStage(newStage)
+    if (type) setPrompt({ type }); else onRefresh()
+  }
+
+  async function handleStatusSelect(newStatus) {
+    const oldStatus = status
+    await changeStatus({
+      mcId: row.id, candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id,
+      oldStatus, newStatus, changedBy,
+    })
+    setStatus(newStatus)
+
+    const type = promptTypeForStatus(newStatus)
+    if (type) setPrompt({ type }); else onRefresh()
+  }
+
+  const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
+
+  return (
+    <>
+      <CandidateCard
+        onClick={() => onSelect(c)}
+        applicantId={row.applicant_id}
+        name={c.name}
+        meta={[row.mandates?.clients?.name, row.mandates?.title].filter(Boolean).join(' · ') || undefined}
+        stage={stage}
+        status={status}
+        stageOptions={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
+        statusOptions={statusOptions}
+        onStageSelect={handleStageSelect}
+        onStatusSelect={handleStatusSelect}
+        aging={<InStageBadge dateStr={row.status_changed_at} />}
+        rowBg={noShowRowBg({ status, status_changed_at: row.status_changed_at })}
+        detailLines={[
+          c.phone,
+          interviewOrDojLine({ ...row, stage }),
+          row.linked_by_profile?.name ? `Recruiter: ${row.linked_by_profile.name}` : null,
+          row.status_changed_at ? `Updated ${formatRelativeDate(row.status_changed_at)}` : null,
+        ].filter(Boolean)}
+      />
+      {prompt && (
+        <StagePromptModal
+          type={prompt.type}
+          mcId={row.id}
+          supabaseClient={supabase}
+          existingData={row}
+          userId={changedBy}
+          onClose={() => { setPrompt(null); onRefresh() }}
+        />
+      )}
+    </>
+  )
+}
+
 function NewMCTable({ rows, loading, onSelect, onRefresh }) {
   if (loading) return <LoadingState />
   if (rows.length === 0) return <EmptyState />
@@ -557,28 +619,9 @@ function NewMCTable({ rows, loading, onSelect, onRefresh }) {
       </div>
 
       <div className="md:hidden">
-        {rows.map((row) => {
-          const c = row.candidates ?? {}
-          return (
-            <CandidateCard
-              key={row.id}
-              onClick={() => onSelect(c)}
-              applicantId={row.applicant_id}
-              name={c.name}
-              meta={[row.mandates?.clients?.name, row.mandates?.title].filter(Boolean).join(' · ') || undefined}
-              stage={row.stage}
-              status={row.status}
-              aging={<InStageBadge dateStr={row.status_changed_at} />}
-              rowBg={noShowRowBg({ status: row.status, status_changed_at: row.status_changed_at })}
-              detailLines={[
-                c.phone,
-                interviewOrDojLine(row),
-                row.linked_by_profile?.name ? `Recruiter: ${row.linked_by_profile.name}` : null,
-                row.status_changed_at ? `Updated ${formatRelativeDate(row.status_changed_at)}` : null,
-              ].filter(Boolean)}
-            />
-          )
-        })}
+        {rows.map((row) => (
+          <NewMCCardRow key={row.id} row={row} onSelect={onSelect} onRefresh={onRefresh} />
+        ))}
       </div>
     </>
   )
@@ -600,44 +643,28 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
   async function handleStageChange(newStage) {
     const oldStage  = stage
     const oldStatus = status
-    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
 
+    const newStatus = await changeStage({
+      mcId: row.id, candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id,
+      oldStage, oldStatus, newStage, changedBy,
+    })
     setStage(newStage)
     setStatus(newStatus ?? '')
 
-    await supabase.from('mandate_candidates')
-      .update({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
-      .eq('id', row.id)
-
-    await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'stage', oldValue: oldStage, newValue: newStage })
-    if (oldStatus !== newStatus) {
-      await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    }
-
-    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
-      setPrompt({ type: 'assessment' })
-    } else if (INTERVIEW_STAGES.has(newStage)) {
-      setPrompt({ type: 'interview' })
-    } else if (newStage === 'Offer') {
-      setPrompt({ type: 'offer' })
-    } else if (newStage === 'Joining') {
-      setPrompt({ type: 'joining' })
-    } else {
-      onRefresh()
-    }
+    const type = promptTypeForStage(newStage)
+    if (type) setPrompt({ type }); else onRefresh()
   }
 
   async function handleStatusChange(newStatus) {
     const oldStatus = status
+    await changeStatus({
+      mcId: row.id, candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id,
+      oldStatus, newStatus, changedBy,
+    })
     setStatus(newStatus)
 
-    await supabase.from('mandate_candidates').update({ status: newStatus, status_changed_at: new Date().toISOString() }).eq('id', row.id)
-    await logActivity({ candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    if (newStatus === 'Invoice Raised') {
-      setPrompt({ type: 'invoice' })
-    } else {
-      onRefresh()
-    }
+    const type = promptTypeForStatus(newStatus)
+    if (type) setPrompt({ type }); else onRefresh()
   }
 
   const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
@@ -731,6 +758,82 @@ function MCRow({ row, onSelect, activeTab, onRefresh, onReassign }) {
   )
 }
 
+// Mobile card equivalent of MCRow (Talent Pool / Placed) — Re-assign is a
+// desktop-only action for this pass (opens AssignMandateModal, unverified on
+// mobile), so it's intentionally omitted from the card; stage/status editing
+// uses the same shared mutation logic as everywhere else.
+function MCCardRow({ row, onSelect, onRefresh }) {
+  const { session } = useAuth()
+  const { isFounder } = useRole()
+  const [stage, setStage]   = useState(row.stage ?? '')
+  const [status, setStatus] = useState(row.status ?? '')
+  const [prompt, setPrompt] = useState(null)
+
+  const c         = row.candidates ?? {}
+  const changedBy = session?.user?.id
+
+  async function handleStageSelect(newStage) {
+    const oldStage  = stage
+    const oldStatus = status
+    const newStatus = await changeStage({
+      mcId: row.id, candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id,
+      oldStage, oldStatus, newStage, changedBy,
+    })
+    setStage(newStage)
+    setStatus(newStatus ?? '')
+
+    const type = promptTypeForStage(newStage)
+    if (type) setPrompt({ type }); else onRefresh()
+  }
+
+  async function handleStatusSelect(newStatus) {
+    const oldStatus = status
+    await changeStatus({
+      mcId: row.id, candidateId: row.candidate_id, mandateId: row.mandate_id, applicantId: row.applicant_id,
+      oldStatus, newStatus, changedBy,
+    })
+    setStatus(newStatus)
+
+    const type = promptTypeForStatus(newStatus)
+    if (type) setPrompt({ type }); else onRefresh()
+  }
+
+  const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
+
+  return (
+    <>
+      <CandidateCard
+        onClick={() => onSelect(c)}
+        applicantId={row.applicant_id}
+        name={c.name}
+        meta={[row.mandates?.clients?.name, row.mandates?.title].filter(Boolean).join(' · ') || undefined}
+        stage={stage}
+        status={status}
+        stageOptions={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
+        statusOptions={statusOptions}
+        onStageSelect={handleStageSelect}
+        onStatusSelect={handleStatusSelect}
+        detailLines={[
+          c.skill_role,
+          row.linked_by_profile?.name ? `Recruiter: ${row.linked_by_profile.name}` : null,
+          c.total_exp != null ? `Exp: ${c.total_exp} yrs` : null,
+          `Updated ${formatRelativeDate(row.status_changed_at ?? row.linked_at)}`,
+        ].filter(Boolean)}
+      />
+      {prompt && (
+        <StagePromptModal
+          type={prompt.type}
+          mcId={row.id}
+          supabaseClient={supabase}
+          existingData={row}
+          userId={changedBy}
+          onClose={() => { setPrompt(null); onRefresh() }}
+        />
+      )}
+    </>
+  )
+}
+
 function MCTable({ rows, loading, onSelect, activeTab, onRefresh, onReassign }) {
   if (loading) return <LoadingState />
   if (rows.length === 0) return <EmptyState />
@@ -771,26 +874,9 @@ function MCTable({ rows, loading, onSelect, activeTab, onRefresh, onReassign }) 
       </div>
 
       <div className="md:hidden">
-        {rows.map((row) => {
-          const c = row.candidates ?? {}
-          return (
-            <CandidateCard
-              key={row.id}
-              onClick={() => onSelect(c)}
-              applicantId={row.applicant_id}
-              name={c.name}
-              meta={[row.mandates?.clients?.name, row.mandates?.title].filter(Boolean).join(' · ') || undefined}
-              stage={row.stage}
-              status={row.status}
-              detailLines={[
-                c.skill_role,
-                row.linked_by_profile?.name ? `Recruiter: ${row.linked_by_profile.name}` : null,
-                c.total_exp != null ? `Exp: ${c.total_exp} yrs` : null,
-                `Updated ${formatRelativeDate(row.status_changed_at ?? row.linked_at)}`,
-              ].filter(Boolean)}
-            />
-          )
-        })}
+        {rows.map((row) => (
+          <MCCardRow key={row.id} row={row} onSelect={onSelect} onRefresh={onRefresh} />
+        ))}
       </div>
     </>
   )
@@ -911,45 +997,29 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
     if (!mc) return
     const oldStage  = stage
     const oldStatus = status
-    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
 
+    const newStatus = await changeStage({
+      mcId: mc.id, candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id,
+      oldStage, oldStatus, newStage, changedBy,
+    })
     setStage(newStage)
     setStatus(newStatus ?? '')
 
-    await supabase.from('mandate_candidates')
-      .update({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
-      .eq('id', mc.id)
-
-    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'stage', oldValue: oldStage, newValue: newStage })
-    if (oldStatus !== newStatus) {
-      await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    }
-
-    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') {
-      setPrompt({ type: 'assessment' })
-    } else if (INTERVIEW_STAGES.has(newStage)) {
-      setPrompt({ type: 'interview' })
-    } else if (newStage === 'Offer') {
-      setPrompt({ type: 'offer' })
-    } else if (newStage === 'Joining') {
-      setPrompt({ type: 'joining' })
-    } else {
-      onRefresh()
-    }
+    const type = promptTypeForStage(newStage)
+    if (type) setPrompt({ type }); else onRefresh()
   }
 
   async function handleStatusChange(newStatus) {
     if (!mc) return
     const oldStatus = status
+    await changeStatus({
+      mcId: mc.id, candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id,
+      oldStatus, newStatus, changedBy,
+    })
     setStatus(newStatus)
 
-    await supabase.from('mandate_candidates').update({ status: newStatus, status_changed_at: new Date().toISOString() }).eq('id', mc.id)
-    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
-    if (newStatus === 'Invoice Raised') {
-      setPrompt({ type: 'invoice' })
-    } else {
-      onRefresh()
-    }
+    const type = promptTypeForStatus(newStatus)
+    if (type) setPrompt({ type }); else onRefresh()
   }
 
   const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
@@ -1029,6 +1099,84 @@ function AllCandidateRow({ row, onSelect, onRefresh }) {
   )
 }
 
+// Mobile card equivalent of AllCandidateRow — candidates on this tab may not
+// be linked to any mandate yet (mc === null), in which case there's nothing
+// to edit, matching desktop's <StageBadge value={null}/> fallback.
+function AllCandidateCardRow({ row, onSelect, onRefresh }) {
+  const { session } = useAuth()
+  const { isFounder } = useRole()
+  const mc = latestMC(row)
+
+  const [stage, setStage]   = useState(mc?.stage ?? '')
+  const [status, setStatus] = useState(mc?.status ?? '')
+  const [prompt, setPrompt] = useState(null)
+
+  const changedBy = session?.user?.id
+
+  async function handleStageSelect(newStage) {
+    if (!mc) return
+    const oldStage  = stage
+    const oldStatus = status
+    const newStatus = await changeStage({
+      mcId: mc.id, candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id,
+      oldStage, oldStatus, newStage, changedBy,
+    })
+    setStage(newStage)
+    setStatus(newStatus ?? '')
+
+    const type = promptTypeForStage(newStage)
+    if (type) setPrompt({ type }); else onRefresh()
+  }
+
+  async function handleStatusSelect(newStatus) {
+    if (!mc) return
+    const oldStatus = status
+    await changeStatus({
+      mcId: mc.id, candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id,
+      oldStatus, newStatus, changedBy,
+    })
+    setStatus(newStatus)
+
+    const type = promptTypeForStatus(newStatus)
+    if (type) setPrompt({ type }); else onRefresh()
+  }
+
+  const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
+
+  return (
+    <>
+      <CandidateCard
+        onClick={() => onSelect(row)}
+        applicantId={row.id}
+        name={row.name}
+        meta={[mc?.mandates?.clients?.name, mc?.mandates?.title].filter(Boolean).join(' · ') || undefined}
+        stage={stage}
+        status={status}
+        stageOptions={mc ? (isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)) : []}
+        statusOptions={mc ? statusOptions : []}
+        onStageSelect={mc ? handleStageSelect : undefined}
+        onStatusSelect={mc ? handleStatusSelect : undefined}
+        detailLines={[
+          row.skill_role,
+          row.profiles?.name ? `Recruiter: ${row.profiles.name}` : null,
+          row.total_exp != null ? `Exp: ${row.total_exp} yrs` : null,
+          `Added ${formatRelativeDate(row.created_at)}`,
+        ].filter(Boolean)}
+      />
+      {prompt && mc && (
+        <StagePromptModal
+          type={prompt.type}
+          mcId={mc.id}
+          supabaseClient={supabase}
+          existingData={mc}
+          userId={changedBy}
+          onClose={() => { setPrompt(null); onRefresh() }}
+        />
+      )}
+    </>
+  )
+}
+
 function AllCandidatesTable({ rows, loading, onSelect, onRefresh }) {
   if (loading) return <LoadingState />
   if (rows.length === 0) return <EmptyState message="No candidates found" />
@@ -1063,26 +1211,9 @@ function AllCandidatesTable({ rows, loading, onSelect, onRefresh }) {
       </div>
 
       <div className="md:hidden">
-        {rows.map((row) => {
-          const mc = latestMC(row)
-          return (
-            <CandidateCard
-              key={row.id}
-              onClick={() => onSelect(row)}
-              applicantId={row.id}
-              name={row.name}
-              meta={[mc?.mandates?.clients?.name, mc?.mandates?.title].filter(Boolean).join(' · ') || undefined}
-              stage={mc?.stage}
-              status={mc?.status}
-              detailLines={[
-                row.skill_role,
-                row.profiles?.name ? `Recruiter: ${row.profiles.name}` : null,
-                row.total_exp != null ? `Exp: ${row.total_exp} yrs` : null,
-                `Added ${formatRelativeDate(row.created_at)}`,
-              ].filter(Boolean)}
-            />
-          )
-        })}
+        {rows.map((row) => (
+          <AllCandidateCardRow key={row.id} row={row} onSelect={onSelect} onRefresh={onRefresh} />
+        ))}
       </div>
     </>
   )

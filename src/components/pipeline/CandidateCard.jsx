@@ -1,14 +1,27 @@
+import { useState } from 'react'
 import { StageBadge, StatusBadge } from './StageBadge'
+import StageStatusSheet from './StageStatusSheet'
 
-// View-only stacked card for phone-width screens. Desktop keeps the
-// existing <table> layout; this is only ever rendered inside a
-// `md:hidden` wrapper alongside it.
-export default function CandidateCard({ onClick, applicantId, name, meta, stage, status, detailLines, aging, rowBg = '' }) {
+// Stacked card for phone-width screens. Desktop keeps the existing <table>
+// layout; this is only ever rendered inside a `md:hidden` wrapper alongside
+// it. Tapping the card opens the candidate panel; when stageOptions/
+// statusOptions + onStageSelect/onStatusSelect are provided, the stage/status
+// badges are independently tappable (own bottom sheet, doesn't also open the
+// panel) — omit them to keep a badge read-only (e.g. Unassigned candidates
+// have no stage/status at all).
+export default function CandidateCard({
+  onClick, applicantId, name, meta, stage, status, detailLines, aging, rowBg = '',
+  stageOptions, statusOptions, onStageSelect, onStatusSelect,
+}) {
+  const [sheet, setSheet] = useState(null) // 'stage' | 'status' | null
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`w-full text-left px-4 py-3 border-b border-[#F0F0F4] active:bg-[#F5F5F8] transition-colors ${rowBg}`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
+      className={`w-full text-left px-4 py-3 border-b border-[#F0F0F4] active:bg-[#F5F5F8] transition-colors cursor-pointer ${rowBg}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -22,8 +35,32 @@ export default function CandidateCard({ onClick, applicantId, name, meta, stage,
 
       {(stage || status) && (
         <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-          {stage && <StageBadge value={stage} />}
-          {status && <StatusBadge value={status} />}
+          {stage && (
+            onStageSelect ? (
+              <button
+                type="button"
+                className="active:opacity-60 transition-opacity"
+                onClick={(e) => { e.stopPropagation(); setSheet('stage') }}
+              >
+                <StageBadge value={stage} />
+              </button>
+            ) : (
+              <StageBadge value={stage} />
+            )
+          )}
+          {status && (
+            onStatusSelect && statusOptions?.length > 0 ? (
+              <button
+                type="button"
+                className="active:opacity-60 transition-opacity"
+                onClick={(e) => { e.stopPropagation(); setSheet('status') }}
+              >
+                <StatusBadge value={status} />
+              </button>
+            ) : (
+              <StatusBadge value={status} />
+            )
+          )}
         </div>
       )}
 
@@ -34,6 +71,25 @@ export default function CandidateCard({ onClick, applicantId, name, meta, stage,
           ))}
         </div>
       )}
-    </button>
+
+      {sheet === 'stage' && (
+        <StageStatusSheet
+          title="Stage"
+          value={stage}
+          options={stageOptions ?? []}
+          onSelect={onStageSelect}
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {sheet === 'status' && (
+        <StageStatusSheet
+          title="Status"
+          value={status}
+          options={statusOptions ?? []}
+          onSelect={onStatusSelect}
+          onClose={() => setSheet(null)}
+        />
+      )}
+    </div>
   )
 }
