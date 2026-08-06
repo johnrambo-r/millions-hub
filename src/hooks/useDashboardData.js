@@ -37,7 +37,7 @@ const MC_DASHBOARD_SELECT = `
     current_location, hometown, preferred_location,
     education, year_of_passing,
     current_company, emp_mode, payroll_company, notice_period,
-    current_ctc, expected_ctc,
+    current_ctc, expected_ctc_min, expected_ctc_max,
     comments, resume_url,
     recruiter_id, created_at,
     profiles(id, name),

@@ -26,7 +26,7 @@ const INITIAL = {
   education: '', year_of_passing: '',
   // Compensation
   current_ctc: '', ctc_breakup_fixed: '', ctc_breakup_variable: '',
-  expected_ctc: '',
+  expected_ctc_min: '', expected_ctc_max: '',
   // Availability
   notice_period: '', lwd: '', dob: '',
   offers_count: '', offers_details: '',
@@ -52,7 +52,11 @@ function validate(f, resumeFile) {
   if (!f.education)                 e.education        = 'Required'
   if (!f.year_of_passing)           e.year_of_passing  = 'Required'
   if (f.current_ctc === '')         e.current_ctc      = 'Required'
-  if (f.expected_ctc === '')        e.expected_ctc     = 'Required'
+  if (f.expected_ctc_min === '')    e.expected_ctc_min = 'Required'
+  if (f.expected_ctc_max === '')    e.expected_ctc_max = 'Required'
+  if (f.expected_ctc_min !== '' && f.expected_ctc_max !== '' &&
+      parseFloat(f.expected_ctc_max) < parseFloat(f.expected_ctc_min))
+                                    e.expected_ctc_max = 'Max must be ≥ Min'
   if (!f.notice_period)             e.notice_period    = 'Required'
   if (!f.source)                    e.source           = 'Required'
   if (f.emp_mode === 'Contract' && !f.payroll_company.trim())
@@ -219,7 +223,8 @@ export default function AddCandidate() {
             variable: form.ctc_breakup_variable !== '' ? parseFloat(form.ctc_breakup_variable) : null,
           })
         : null,
-      expected_ctc: parseFloat(form.expected_ctc),
+      expected_ctc_min: parseFloat(form.expected_ctc_min),
+      expected_ctc_max: parseFloat(form.expected_ctc_max),
       // Availability
       notice_period: form.notice_period,
       lwd:           form.lwd || null,
@@ -378,18 +383,27 @@ export default function AddCandidate() {
 
           {/* ── Compensation ── */}
           <FormSection title="Compensation">
-            <FormField label="Current CTC (LPA)" required error={errors.current_ctc}>
-              <input type="number" min={0} step={0.5} value={form.current_ctc} onChange={(e) => setField('current_ctc', e.target.value)} placeholder="12.0" className={inputCls(errors.current_ctc)} />
-            </FormField>
-            <FormField label="Expected CTC (LPA)" required error={errors.expected_ctc}>
-              <input type="number" min={0} step={0.5} value={form.expected_ctc} onChange={(e) => setField('expected_ctc', e.target.value)} placeholder="15.0" className={inputCls(errors.expected_ctc)} />
-            </FormField>
-            <FormField label="CTC Fixed (LPA)" error={errors.ctc_breakup_fixed}>
-              <input type="number" min={0} step={0.5} value={form.ctc_breakup_fixed} onChange={(e) => setField('ctc_breakup_fixed', e.target.value)} placeholder="Optional" className={inputCls(errors.ctc_breakup_fixed)} />
-            </FormField>
-            <FormField label="CTC Variable (LPA)" error={errors.ctc_breakup_variable}>
-              <input type="number" min={0} step={0.5} value={form.ctc_breakup_variable} onChange={(e) => setField('ctc_breakup_variable', e.target.value)} placeholder="Optional" className={inputCls(errors.ctc_breakup_variable)} />
-            </FormField>
+            {/* Row 1: Current CTC is grouped with its Fixed/Variable breakdown */}
+            <div className="col-span-2 grid grid-cols-3 gap-x-6 gap-y-5">
+              <FormField label="Current CTC (LPA)" required error={errors.current_ctc}>
+                <input type="number" min={0} step={0.5} value={form.current_ctc} onChange={(e) => setField('current_ctc', e.target.value)} placeholder="12.0" className={inputCls(errors.current_ctc)} />
+              </FormField>
+              <FormField label="Fixed (LPA)" error={errors.ctc_breakup_fixed}>
+                <input type="number" min={0} step={0.5} value={form.ctc_breakup_fixed} onChange={(e) => setField('ctc_breakup_fixed', e.target.value)} placeholder="Optional" className={inputCls(errors.ctc_breakup_fixed)} />
+              </FormField>
+              <FormField label="Variable (LPA)" error={errors.ctc_breakup_variable}>
+                <input type="number" min={0} step={0.5} value={form.ctc_breakup_variable} onChange={(e) => setField('ctc_breakup_variable', e.target.value)} placeholder="Optional" className={inputCls(errors.ctc_breakup_variable)} />
+              </FormField>
+            </div>
+            {/* Row 2: Expected CTC as a range */}
+            <div className="col-span-2 grid grid-cols-2 gap-x-6 gap-y-5">
+              <FormField label="Expected CTC Min (LPA)" required error={errors.expected_ctc_min}>
+                <input type="number" min={0} step={0.5} value={form.expected_ctc_min} onChange={(e) => setField('expected_ctc_min', e.target.value)} placeholder="12.0" className={inputCls(errors.expected_ctc_min)} />
+              </FormField>
+              <FormField label="Expected CTC Max (LPA)" required error={errors.expected_ctc_max}>
+                <input type="number" min={0} step={0.5} value={form.expected_ctc_max} onChange={(e) => setField('expected_ctc_max', e.target.value)} placeholder="15.0" className={inputCls(errors.expected_ctc_max)} />
+              </FormField>
+            </div>
           </FormSection>
 
           {/* ── Availability ── */}

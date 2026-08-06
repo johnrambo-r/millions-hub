@@ -44,7 +44,7 @@ const CANDIDATE_FIELDS = `
   education, year_of_passing,
   current_company, skill_role, total_exp, relevant_exp,
   emp_mode, payroll_company, notice_period,
-  current_ctc, expected_ctc, ctc_breakup,
+  current_ctc, expected_ctc_min, expected_ctc_max, ctc_breakup,
   source, linkedin_url, languages_known, reason_for_looking,
   comments, resume_url,
   offers_in_hand, lwd, dob, notable_ids,

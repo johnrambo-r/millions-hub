@@ -65,6 +65,13 @@ function formatMoney(val) {
   return `₹${n}`
 }
 
+function formatCtcRange(min, max) {
+  if (min == null && max == null) return null
+  if (min == null) return `${max} LPA`
+  if (max == null) return `${min} LPA`
+  return min === max ? `${min} LPA` : `${min} – ${max} LPA`
+}
+
 function daysInStageMC(mc) {
   const ref = mc.status_changed_at ?? mc.linked_at
   if (!ref) return 0
@@ -512,7 +519,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       payroll_company:      candidate.payroll_company ?? '',
       notice_period:        candidate.notice_period ?? '',
       current_ctc:          candidate.current_ctc?.toString() ?? '',
-      expected_ctc:         candidate.expected_ctc?.toString() ?? '',
+      expected_ctc_min:     candidate.expected_ctc_min?.toString() ?? '',
+      expected_ctc_max:     candidate.expected_ctc_max?.toString() ?? '',
       comments:             candidate.comments ?? '',
       source:               candidate.source ?? '',
       linkedin_url:         candidate.linkedin_url ?? '',
@@ -563,8 +571,18 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
 
   // Core save logic — returns true on success, false on error
   async function performSave() {
-    setEditSaving(true)
     setEditError('')
+
+    if (editFields.expected_ctc_min === '' || editFields.expected_ctc_max === '') {
+      setEditError('Expected CTC Min and Max are both required.')
+      return false
+    }
+    if (parseFloat(editFields.expected_ctc_max) < parseFloat(editFields.expected_ctc_min)) {
+      setEditError('Expected CTC Max must be ≥ Min.')
+      return false
+    }
+
+    setEditSaving(true)
 
     let newResumeUrl = undefined
     if (resumeFile) {
@@ -607,7 +625,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       payroll_company:    editFields.payroll_company.trim() || null,
       notice_period:      editFields.notice_period || null,
       current_ctc:        editFields.current_ctc !== '' ? parseFloat(editFields.current_ctc) : null,
-      expected_ctc:       editFields.expected_ctc !== '' ? parseFloat(editFields.expected_ctc) : null,
+      expected_ctc_min:   parseFloat(editFields.expected_ctc_min),
+      expected_ctc_max:   parseFloat(editFields.expected_ctc_max),
       comments:           editFields.comments.trim() || null,
       source:             editFields.source || null,
       linkedin_url:       editFields.linkedin_url.trim() || null,
@@ -1182,12 +1201,25 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                     {NOTICE_PERIODS.map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </EditField>
-                <EditField label="Current CTC (LPA)">
-                  <input type="number" min={0} step={0.5} value={editFields.current_ctc ?? ''} onChange={(e) => setEditField('current_ctc', e.target.value)} className={fldCls} />
-                </EditField>
-                <EditField label="Expected CTC (LPA)">
-                  <input type="number" min={0} step={0.5} value={editFields.expected_ctc ?? ''} onChange={(e) => setEditField('expected_ctc', e.target.value)} className={fldCls} />
-                </EditField>
+                <div className="col-span-2 grid grid-cols-3 gap-x-8 gap-y-5">
+                  <EditField label="Current CTC (LPA)">
+                    <input type="number" min={0} step={0.5} value={editFields.current_ctc ?? ''} onChange={(e) => setEditField('current_ctc', e.target.value)} className={fldCls} />
+                  </EditField>
+                  <EditField label="Fixed (LPA)">
+                    <input type="number" min={0} step={0.5} value={editFields.ctc_breakup_fixed ?? ''} onChange={(e) => setEditField('ctc_breakup_fixed', e.target.value)} className={fldCls} />
+                  </EditField>
+                  <EditField label="Variable (LPA)">
+                    <input type="number" min={0} step={0.5} value={editFields.ctc_breakup_variable ?? ''} onChange={(e) => setEditField('ctc_breakup_variable', e.target.value)} className={fldCls} />
+                  </EditField>
+                </div>
+                <div className="col-span-2 grid grid-cols-2 gap-x-8 gap-y-5">
+                  <EditField label="Expected CTC Min (LPA)">
+                    <input type="number" min={0} step={0.5} value={editFields.expected_ctc_min ?? ''} onChange={(e) => setEditField('expected_ctc_min', e.target.value)} className={fldCls} />
+                  </EditField>
+                  <EditField label="Expected CTC Max (LPA)">
+                    <input type="number" min={0} step={0.5} value={editFields.expected_ctc_max ?? ''} onChange={(e) => setEditField('expected_ctc_max', e.target.value)} className={fldCls} />
+                  </EditField>
+                </div>
                 <EditField label="Comments" colSpan2>
                   <textarea
                     value={editFields.comments || ''}
@@ -1255,12 +1287,6 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
               <div className="mt-6 pt-5 border-t border-[#F0F0F4]">
                 <p className="text-xs font-semibold text-[#999] uppercase tracking-wider mb-4">Additional Info</p>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-5">
-                  <EditField label="CTC Fixed (LPA)">
-                    <input type="number" min={0} step={0.5} value={editFields.ctc_breakup_fixed ?? ''} onChange={(e) => setEditField('ctc_breakup_fixed', e.target.value)} className={fldCls} />
-                  </EditField>
-                  <EditField label="CTC Variable (LPA)">
-                    <input type="number" min={0} step={0.5} value={editFields.ctc_breakup_variable ?? ''} onChange={(e) => setEditField('ctc_breakup_variable', e.target.value)} className={fldCls} />
-                  </EditField>
                   <EditField label="Offers in hand (#)">
                     <input type="number" min={0} step={1} value={editFields.offers_count ?? ''} onChange={(e) => setEditField('offers_count', e.target.value)} className={fldCls} />
                   </EditField>
@@ -1310,7 +1336,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                   {candidate?.current_ctc != null ? `${candidate.current_ctc} LPA` : null}
                 </Field>
                 <Field label="Expected CTC">
-                  {candidate?.expected_ctc != null ? `${candidate.expected_ctc} LPA` : null}
+                  {formatCtcRange(candidate?.expected_ctc_min, candidate?.expected_ctc_max)}
                 </Field>
                 <Field label="Source">{candidate?.source}</Field>
                 <Field label="Languages known">{candidate?.languages_known}</Field>
