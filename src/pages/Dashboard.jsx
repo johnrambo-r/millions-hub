@@ -15,10 +15,12 @@ const TABS = [
 ]
 
 const WIDGET_CONFIG = {
-  interviews:       { title: 'Interviews today' },
-  cvOverdue:        { title: 'CV feedback overdue' },
-  interviewOverdue: { title: 'Interview feedback ageing' },
-  liveL2:           { title: 'Live L2+ pipeline' },
+  interviews:         { title: 'Interviews today' },
+  interviewsTomorrow: { title: 'Interviews tomorrow' },
+  interviewsNext7:    { title: 'Interviews in next 7 days' },
+  cvOverdue:          { title: 'CV feedback overdue' },
+  interviewOverdue:   { title: 'Interview feedback ageing' },
+  liveL2:             { title: 'Live L2+ pipeline' },
 }
 
 const TH = ({ children, className = '' }) => (
@@ -36,11 +38,13 @@ export default function Dashboard() {
   const { role } = useRole()
 
   const interviews = data?.interviewsToday ?? []
+  const interviewsTomorrow = data?.interviewsTomorrow ?? []
+  const interviewsNext7 = data?.interviewsNext7Days ?? []
   const cvOverdue = data?.cvFeedbackOverdue ?? []
   const interviewOverdue = data?.interviewFeedbackOverdue ?? []
   const liveL2 = data?.liveL2Plus ?? []
 
-  const listMap = { interviews, cvOverdue, interviewOverdue, liveL2 }
+  const listMap = { interviews, interviewsTomorrow, interviewsNext7, cvOverdue, interviewOverdue, liveL2 }
   const activeList = listMap[selectedMetric] ?? []
   const activeConfig = WIDGET_CONFIG[selectedMetric]
 
@@ -70,14 +74,28 @@ export default function Dashboard() {
         {activeTab === 'overview' && (
           <div className="p-6 space-y-4 max-w-[1400px]">
 
-            {/* Metric strip — 4 columns, each card clickable */}
-            <div className="grid grid-cols-4 gap-4">
+            {/* Metric strip — 3 columns x 2 rows, each card clickable */}
+            <div className="grid grid-cols-3 gap-4">
               <MetricCard
                 label="Interviews today"
                 value={loading ? '…' : interviews.length}
                 accent="#5E6AD2"
                 selected={selectedMetric === 'interviews'}
                 onClick={() => setSelectedMetric('interviews')}
+              />
+              <MetricCard
+                label="Interviews tomorrow"
+                value={loading ? '…' : interviewsTomorrow.length}
+                accent="#5E6AD2"
+                selected={selectedMetric === 'interviewsTomorrow'}
+                onClick={() => setSelectedMetric('interviewsTomorrow')}
+              />
+              <MetricCard
+                label="Interviews in next 7 days"
+                value={loading ? '…' : interviewsNext7.length}
+                accent="#5E6AD2"
+                selected={selectedMetric === 'interviewsNext7'}
+                onClick={() => setSelectedMetric('interviewsNext7')}
               />
               <MetricCard
                 label="CV feedback overdue"

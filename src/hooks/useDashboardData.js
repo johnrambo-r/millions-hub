@@ -12,6 +12,7 @@ const DEAD_STATUSES = new Set([
 const L2_PLUS_STAGES    = ['L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining']
 const CV_STAGES         = ['CV']
 const INTERVIEW_STAGES  = ['L1', 'L2', 'L3', 'Client Onsite', 'HR']
+const CV_FEEDBACK_STATUSES = new Set(['Internal Review', 'Processed - FB Pending'])
 
 function localDateStr(date = new Date()) {
   const y = date.getFullYear()
@@ -89,18 +90,29 @@ export function useDashboardData(profile) {
           _mc_id:            mc.id,
         }))
 
-      const todayStr = localDateStr()
+      const todayStr    = localDateStr()
+      const tomorrowStr = localDateStr(new Date(Date.now() + 86400000))
+      const next7Str    = localDateStr(new Date(Date.now() + 6 * 86400000))
 
       const interviewsToday = rows.filter(
         (r) => r.interview_date?.slice(0, 10) === todayStr
       )
 
+      const interviewsTomorrow = rows.filter(
+        (r) => r.interview_date?.slice(0, 10) === tomorrowStr
+      )
+
+      const interviewsNext7Days = rows.filter((r) => {
+        const d = r.interview_date?.slice(0, 10)
+        return !!d && d >= todayStr && d <= next7Str
+      })
+
       const cvFeedbackOverdue = rows
         .filter(
           (r) =>
             CV_STAGES.includes(r.stage) &&
-            r.status === 'Processed - FB Pending' &&
-            daysSince(r.status_changed_at) >= 3
+            CV_FEEDBACK_STATUSES.has(r.status) &&
+            daysSince(r.status_changed_at) > 3
         )
         .map((r) => ({ ...r, daysOverdue: daysSince(r.status_changed_at) }))
 
@@ -109,15 +121,22 @@ export function useDashboardData(profile) {
           (r) =>
             INTERVIEW_STAGES.includes(r.stage) &&
             r.status === 'FB Pending' &&
-            daysSince(r.status_changed_at) >= 3
+            daysSince(r.interview_date) > 3
         )
-        .map((r) => ({ ...r, daysOverdue: daysSince(r.status_changed_at) }))
+        .map((r) => ({ ...r, daysOverdue: daysSince(r.interview_date) }))
 
       const liveL2Plus = rows.filter(
         (r) => L2_PLUS_STAGES.includes(r.stage) && !DEAD_STATUSES.has(r.status)
       )
 
-      setData({ interviewsToday, cvFeedbackOverdue, interviewFeedbackOverdue, liveL2Plus })
+      setData({
+        interviewsToday,
+        interviewsTomorrow,
+        interviewsNext7Days,
+        cvFeedbackOverdue,
+        interviewFeedbackOverdue,
+        liveL2Plus,
+      })
       setLoading(false)
     }
 
