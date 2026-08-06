@@ -13,6 +13,7 @@ const L2_PLUS_STAGES    = ['L2', 'L3', 'Client Onsite', 'HR', 'Offer', 'Joining'
 const CV_STAGES         = ['CV']
 const INTERVIEW_STAGES  = ['L1', 'L2', 'L3', 'Client Onsite', 'HR']
 const CV_FEEDBACK_STATUSES = new Set(['Internal Review', 'Processed - FB Pending'])
+const INTERVIEW_FEEDBACK_STATUSES = new Set(['Scheduled', 'FB Pending'])
 
 function localDateStr(date = new Date()) {
   const y = date.getFullYear()
@@ -120,8 +121,8 @@ export function useDashboardData(profile) {
         .filter(
           (r) =>
             INTERVIEW_STAGES.includes(r.stage) &&
-            r.status === 'FB Pending' &&
-            daysSince(r.interview_date) > 3
+            INTERVIEW_FEEDBACK_STATUSES.has(r.status) &&
+            daysSince(r.interview_date) >= 3
         )
         .map((r) => ({ ...r, daysOverdue: daysSince(r.interview_date) }))
 
