@@ -327,7 +327,7 @@ function ReadDetails({ mandate, workingRecruiters }) {
       : null
 
   return (
-    <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
+    <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 md:grid-cols-3">
       <Field label="Client">
         {mandate.client ? <span className="text-[#5E6AD2]">{mandate.client.name}</span> : null}
       </Field>
@@ -354,13 +354,13 @@ function ReadDetails({ mandate, workingRecruiters }) {
         )}
       </Field>
       {mandate.internal_notes && (
-        <div className="col-span-2 sm:col-span-3">
+        <div className="col-span-1 sm:col-span-2 md:col-span-3">
           <dt className="text-xs font-medium text-[#999] uppercase tracking-wide mb-0.5">Internal Notes</dt>
           <dd className="text-sm text-[#666] leading-relaxed whitespace-pre-wrap">{mandate.internal_notes}</dd>
         </div>
       )}
       {mandate.jd_text && (
-        <div className="col-span-2 sm:col-span-3">
+        <div className="col-span-1 sm:col-span-2 md:col-span-3">
           <dt className="text-xs font-medium text-[#999] uppercase tracking-wide mb-0.5">Job Description</dt>
           <dd><JDTextCollapsible text={mandate.jd_text} /></dd>
         </div>
