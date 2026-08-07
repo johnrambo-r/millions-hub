@@ -2,12 +2,32 @@ import { useState } from 'react'
 import AppShell from '../components/layout/AppShell'
 import MetricCard from '../components/dashboard/MetricCard'
 import DashboardWidget from '../components/dashboard/DashboardWidget'
-import CandidateRow from '../components/dashboard/CandidateRow'
+import CandidateRow, { InStageBadge } from '../components/dashboard/CandidateRow'
+import CandidateCard from '../components/pipeline/CandidateCard'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
 import KpiTab from '../pages/KpiTab'
 import { useProfile } from '../hooks/useProfile'
 import { useDashboardData } from '../hooks/useDashboardData'
 import useRole from '../hooks/useRole'
+import { formatTime12h } from '../lib/formatTime'
+
+const INTERVIEW_STAGES = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
+
+// Plain-text equivalent of CandidateRow's interview/DOJ cell, for the mobile
+// card's detailLines (which take strings, not JSX).
+function interviewDojLine(c) {
+  if (INTERVIEW_STAGES.has(c.stage)) {
+    if (!c.interview_date) return null
+    const d = new Date(c.interview_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    return `Interview: ${d}${c.interview_time ? `, ${formatTime12h(c.interview_time)}` : ''}`
+  }
+  if (c.stage === 'Offer' || c.stage === 'Joining') {
+    if (!c.date_of_joining) return null
+    const d = new Date(c.date_of_joining).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    return `DOJ: ${d}`
+  }
+  return null
+}
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -72,10 +92,10 @@ export default function Dashboard() {
         {activeTab === 'kpi' && <KpiTab role={role} userId={profile?.id} />}
 
         {activeTab === 'overview' && (
-          <div className="p-6 space-y-4 max-w-[1400px]">
+          <div className="p-4 md:p-6 space-y-4 max-w-[1400px]">
 
-            {/* Metric strip — 3 columns x 2 rows, each card clickable */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Metric strip — 3 columns x 2 rows on desktop, 2 columns on mobile, each card clickable */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <MetricCard
                 label="Interviews today"
                 value={loading ? '…' : interviews.length}
@@ -121,34 +141,58 @@ export default function Dashboard() {
             </div>
 
             {/* Single full-width widget — switches based on selectedMetric */}
-            <div style={{ height: 460 }}>
+            <div className="md:h-[460px]">
               <DashboardWidget
                 title={activeConfig.title}
                 empty={!loading && activeList.length === 0}
               >
-                <table className="w-full min-w-[1000px] border-collapse">
-                  <thead className="sticky top-0 z-10 bg-white border-b border-[#F0F0F4]">
-                    <tr>
-                      <TH>Candidate</TH>
-                      <TH>Contact</TH>
-                      <TH>Client · Mandate</TH>
-                      <TH className="w-28">Stage</TH>
-                      <TH className="w-36">Status</TH>
-                      <TH className="w-32">Interview / DOJ</TH>
-                      <TH>Recruiter · AM</TH>
-                      <TH className="w-24">In Stage</TH>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeList.map((c) => (
-                      <CandidateRow
-                        key={c._mc_id}
-                        candidate={c}
-                        onClick={setSelectedCandidate}
-                      />
-                    ))}
-                  </tbody>
-                </table>
+                <div className="hidden md:block">
+                  <table className="w-full min-w-[1000px] border-collapse">
+                    <thead className="sticky top-0 z-10 bg-white border-b border-[#F0F0F4]">
+                      <tr>
+                        <TH>Candidate</TH>
+                        <TH>Contact</TH>
+                        <TH>Client · Mandate</TH>
+                        <TH className="w-28">Stage</TH>
+                        <TH className="w-36">Status</TH>
+                        <TH className="w-32">Interview / DOJ</TH>
+                        <TH>Recruiter · AM</TH>
+                        <TH className="w-24">In Stage</TH>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeList.map((c) => (
+                        <CandidateRow
+                          key={c._mc_id}
+                          candidate={c}
+                          onClick={setSelectedCandidate}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="md:hidden">
+                  {activeList.map((c) => (
+                    <CandidateCard
+                      key={c._mc_id}
+                      onClick={() => setSelectedCandidate(c)}
+                      applicantId={c.applicant_id}
+                      name={c.name}
+                      meta={[c.mandates?.clients?.name, c.mandates?.title].filter(Boolean).join(' · ') || undefined}
+                      stage={c.stage}
+                      status={c.status}
+                      aging={<InStageBadge dateStr={c.status_changed_at} />}
+                      detailLines={[
+                        c.phone,
+                        c.email,
+                        c.linked_by_profile?.name ? `Recruiter: ${c.linked_by_profile.name}` : null,
+                        c.mandates?.am?.name ? `AM: ${c.mandates.am.name}` : null,
+                        interviewDojLine(c),
+                      ].filter(Boolean)}
+                    />
+                  ))}
+                </div>
               </DashboardWidget>
             </div>
 

@@ -49,7 +49,7 @@ function DaysBadge({ days }) {
 
 function PeriodSelector({ period, setPeriod }) {
   return (
-    <div className="px-6 pt-5 pb-4 flex items-center gap-1.5">
+    <div className="px-4 sm:px-6 pt-5 pb-4 flex items-center gap-1.5">
       {PERIODS.map(({ id, label }) => (
         <button
           key={id}
@@ -76,7 +76,7 @@ function HeadlineStrip({ data }) {
     { label: 'IR', value: formatMoney(data.irValue), accent: '#059669' },
   ]
   return (
-    <div className="px-6 grid grid-cols-7 gap-4">
+    <div className="px-4 sm:px-6 grid grid-cols-2 md:grid-cols-7 gap-4">
       {tiles.map((t) => (
         <div key={t.label} className="flex flex-col items-center justify-center px-3 py-4 rounded-xl border border-[#F0F0F4] bg-white">
           <span className="text-2xl font-bold leading-tight tabular-nums" style={{ color: t.accent }}>{t.value}</span>
@@ -174,7 +174,7 @@ function FunnelRatiosSection() {
   const joining = counts?.reached_joining  ?? 0
 
   return (
-    <div className="px-6">
+    <div className="px-4 sm:px-6">
       <SectionHeader>Funnel Ratios</SectionHeader>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -214,7 +214,7 @@ function FunnelRatiosSection() {
             </div>
             <p className="text-sm text-[#999]">{joining} of {total} submissions this period</p>
           </div>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <RatioCard label="Submission → L1" num={l1}      denom={total} />
             <RatioCard label="L1 → L2"          num={l2}      denom={l1}    />
             <RatioCard label="L1 → Offer"        num={offer}   denom={l1}    />
@@ -240,7 +240,7 @@ function RecruiterTable({ recruiterStats }) {
     { cvsSent: 0, interviews: 0, offers: 0, placements: 0, irValue: 0 }
   )
   return (
-    <div className="px-6">
+    <div className="px-4 sm:px-6">
       <SectionHeader>Recruiter Performance</SectionHeader>
       <div className="bg-white rounded-xl border border-[#F0F0F4] overflow-hidden">
         <table className="w-full">
@@ -283,7 +283,7 @@ function RecruiterTable({ recruiterStats }) {
 function RevenueByClientTable({ revenueByClient }) {
   const rows = revenueByClient.filter((c) => c.placements > 0 || c.ir > 0)
   return (
-    <div className="px-6">
+    <div className="px-4 sm:px-6">
       <SectionHeader>Revenue by Client</SectionHeader>
       <div className="bg-white rounded-xl border border-[#F0F0F4] overflow-hidden">
         <table className="w-full">
@@ -314,7 +314,7 @@ function RevenueByClientTable({ revenueByClient }) {
 function AtRiskSection({ atRiskMandates, atRiskCandidates }) {
   const allClear = atRiskMandates.length === 0 && atRiskCandidates.length === 0
   return (
-    <div className="px-6">
+    <div className="px-4 sm:px-6">
       <SectionHeader dot>At Risk</SectionHeader>
       {allClear ? (
         <div className="px-4 py-3 rounded-xl border border-emerald-100 bg-emerald-50 text-sm text-emerald-700">
@@ -504,7 +504,7 @@ function ProjectionSection() {
   const isGrouped = projTab === 'recruiter' || projTab === 'spoc'
 
   return (
-    <div className="px-6">
+    <div className="px-4 sm:px-6">
       <SectionHeader>Revenue Projection</SectionHeader>
 
       <div className="flex items-center gap-1.5 mb-4">
@@ -536,7 +536,7 @@ function ProjectionSection() {
         projData.length === 0 ? (
           <p className="py-6 text-center text-sm text-[#999]">No billing data in the 6-month window.</p>
         ) : (
-          <div className="grid grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             {projData.map((m) => (
               <div
                 key={m.month_index}

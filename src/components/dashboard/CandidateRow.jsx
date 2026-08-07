@@ -3,7 +3,7 @@ import { formatTime12h } from '../../lib/formatTime'
 
 const INTERVIEW_STAGES = new Set(['L1', 'L2', 'L3', 'Client Onsite', 'HR'])
 
-function InStageBadge({ dateStr }) {
+export function InStageBadge({ dateStr }) {
   if (!dateStr) return <span className="text-xs text-[#999]">—</span>
   const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
   if (days < 7)  return <span className="text-xs text-[#666]">{days}d</span>
@@ -47,7 +47,7 @@ export default function CandidateRow({ candidate: c, onClick }) {
     >
       <TD>
         <span className="font-medium text-[#0F0F12] block truncate max-w-[150px]">{c.name ?? '—'}</span>
-        <span className="text-xs text-[#999] font-mono block mt-0.5">{c.id ?? '—'}</span>
+        <span className="text-xs text-[#999] font-mono block mt-0.5">{c.applicant_id ?? '—'}</span>
       </TD>
       <TD>
         <span className="text-xs text-[#666] block">{c.phone ?? '—'}</span>
