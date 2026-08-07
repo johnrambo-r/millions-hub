@@ -184,7 +184,15 @@ function FilterPill({ title, value, options, onSelect }) {
       if (menuRef.current?.contains(e.target)) return
       setOpen(false)
     }
-    function handleScroll() { setOpen(false) }
+    function handleScroll(e) {
+      // Scrolling the options list itself dispatches a 'scroll' event that
+      // this capture-phase listener sees too — ignore that so touch-scrolling
+      // through options doesn't close the menu. Only an ancestor (e.g. the
+      // horizontally-scrollable pill row) scrolling should close it, since
+      // that invalidates the anchor position captured in `rect`.
+      if (menuRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
     function handleKey(e) { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('mousedown', handleClick)
     document.addEventListener('scroll', handleScroll, true)
