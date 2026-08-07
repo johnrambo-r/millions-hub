@@ -106,7 +106,7 @@ function initEditFields(mandate) {
 // ─── Shared small components ──────────────────────────────────────────────────
 
 function Field({ label, children, span = 1 }) {
-  const spanCls = span === 2 ? 'col-span-2' : span === 3 ? 'col-span-3' : ''
+  const spanCls = span === 2 ? 'col-span-1 sm:col-span-2' : span === 3 ? 'col-span-1 sm:col-span-2 md:col-span-3' : ''
   return (
     <div className={spanCls}>
       <dt className="text-xs font-medium text-[#999] uppercase tracking-wide mb-0.5">{label}</dt>
