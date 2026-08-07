@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell'
 import { useMandatesData } from '../hooks/useMandatesData'
 import Pagination from '../components/Pagination'
+import FilterPill from '../components/FilterPill'
 
 // ─── badges ────────────────────────────────────────────────────────────────
 
@@ -106,54 +107,97 @@ function MandatesTable({ rows, loading, onSelect, hasFilters }) {
   }
 
   return (
-    <table className="w-full min-w-[860px] border-collapse">
-        <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
-          <tr className="border-b border-[#F0F0F4]">
-            <TH className="w-36">Job ID</TH>
-            <TH>Title</TH>
-            <TH>Client</TH>
-            <TH>AM</TH>
-            <TH className="w-32">Status</TH>
-            <TH className="w-28">Priority</TH>
-            <TH className="w-24">Positions</TH>
-            <TH className="w-36">Created</TH>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.id}
-              className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors"
-            >
-              <TD>
-                <span className="font-mono text-xs text-[#666] whitespace-nowrap">{row.job_id ?? '—'}</span>
-              </TD>
-              <TD>
-                <span
-                  onClick={(e) => { e.stopPropagation(); onSelect(row.id) }}
-                  className="font-medium text-[#0F0F12] block truncate max-w-[220px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
+    <>
+      <div className="hidden md:block">
+        <table className="w-full min-w-[860px] border-collapse">
+            <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+              <tr className="border-b border-[#F0F0F4]">
+                <TH className="w-36">Job ID</TH>
+                <TH>Title</TH>
+                <TH>Client</TH>
+                <TH>AM</TH>
+                <TH className="w-32">Status</TH>
+                <TH className="w-28">Priority</TH>
+                <TH className="w-24">Positions</TH>
+                <TH className="w-36">Created</TH>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className="border-b border-[#F0F0F4] hover:bg-[#FAFAFA] transition-colors"
                 >
-                  {row.title}
-                </span>
-              </TD>
-              <TD>
-                <span className="text-[#666] block truncate max-w-[160px]">{row.client?.name ?? '—'}</span>
-              </TD>
-              <TD>
-                <span className="text-[#666] block truncate max-w-[140px]">{row.am?.name ?? '—'}</span>
-              </TD>
-              <TD><StatusBadge value={row.status} /></TD>
-              <TD><PriorityBadge value={row.priority} /></TD>
-              <TD>
-                <span className="text-[#666]">{row.num_positions ?? '—'}</span>
-              </TD>
-              <TD>
-                <span className="text-[#666]">{formatDate(row.created_at)}</span>
-              </TD>
-            </tr>
-          ))}
-        </tbody>
-    </table>
+                  <TD>
+                    <span className="font-mono text-xs text-[#666] whitespace-nowrap">{row.job_id ?? '—'}</span>
+                  </TD>
+                  <TD>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); onSelect(row.id) }}
+                      className="font-medium text-[#0F0F12] block truncate max-w-[220px] cursor-pointer hover:text-[#5E6AD2] hover:underline"
+                    >
+                      {row.title}
+                    </span>
+                  </TD>
+                  <TD>
+                    <span className="text-[#666] block truncate max-w-[160px]">{row.client?.name ?? '—'}</span>
+                  </TD>
+                  <TD>
+                    <span className="text-[#666] block truncate max-w-[140px]">{row.am?.name ?? '—'}</span>
+                  </TD>
+                  <TD><StatusBadge value={row.status} /></TD>
+                  <TD><PriorityBadge value={row.priority} /></TD>
+                  <TD>
+                    <span className="text-[#666]">{row.num_positions ?? '—'}</span>
+                  </TD>
+                  <TD>
+                    <span className="text-[#666]">{formatDate(row.created_at)}</span>
+                  </TD>
+                </tr>
+              ))}
+            </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden">
+        {rows.map((row) => (
+          <MandateCard key={row.id} row={row} onSelect={onSelect} />
+        ))}
+      </div>
+    </>
+  )
+}
+
+// Stacked card for phone-width screens, mirroring CandidateCard's structure
+// (src/components/pipeline/CandidateCard.jsx) — kept local rather than reused
+// since mandate status/priority badges are a different shape than the
+// candidate stage/status badges CandidateCard hardcodes.
+function MandateCard({ row, onSelect }) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(row.id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(row.id) } }}
+      className="w-full text-left px-4 py-3 border-b border-[#F0F0F4] active:bg-[#F5F5F8] transition-colors cursor-pointer"
+    >
+      <p className="font-medium text-[#0F0F12] text-sm truncate">{row.title}</p>
+      {row.job_id && <p className="text-xs text-[#999] font-mono mt-0.5 truncate">{row.job_id}</p>}
+
+      <p className="text-xs text-[#666] mt-1.5 truncate">
+        {[row.client?.name, row.am?.name ? `AM: ${row.am.name}` : null].filter(Boolean).join(' · ') || '—'}
+      </p>
+
+      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+        <StatusBadge value={row.status} />
+        <PriorityBadge value={row.priority} />
+      </div>
+
+      <div className="mt-2 space-y-0.5">
+        <p className="text-xs text-[#999]">Positions: {row.num_positions ?? '—'}</p>
+        <p className="text-xs text-[#999]">Created {formatDate(row.created_at)}</p>
+      </div>
+    </div>
   )
 }
 
@@ -192,8 +236,8 @@ export default function MandateList() {
     <AppShell title="Mandates">
       <div className="flex flex-col h-full">
 
-        {/* Filter bar */}
-        <div className="px-6 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
+        {/* Filter bar — desktop */}
+        <div className="hidden md:flex px-6 py-3 border-b border-[#F0F0F4] bg-white items-center gap-3 flex-wrap shrink-0">
           {/* Search */}
           <div className="relative">
             <svg
@@ -251,9 +295,82 @@ export default function MandateList() {
           </button>
         </div>
 
+        {/* Filter bar — mobile */}
+        <div className="md:hidden border-b border-[#F0F0F4] bg-white shrink-0">
+          {/* Search + Add */}
+          <div className="px-4 pt-3 pb-2 flex items-center gap-2">
+            <div className="relative flex-1">
+              <svg
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none"
+                viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
+              >
+                <circle cx="6.5" cy="6.5" r="4.5" />
+                <path d="M10.5 10.5l3 3" strokeLinecap="round" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search mandates…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-full"
+              />
+            </div>
+            <button
+              onClick={() => navigate('/mandates/new')}
+              className="h-8 px-3 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 flex items-center gap-1.5 shrink-0"
+              style={{ backgroundColor: '#5E6AD2' }}
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                <path d="M8 3v10M3 8h10" strokeLinecap="round" />
+              </svg>
+              Add
+            </button>
+          </div>
+
+          {/* Filter pills — horizontally scrollable */}
+          <div className="flex items-center gap-2 px-4 pb-2 overflow-x-auto">
+            <FilterPill
+              title="Status"
+              value={statusFilter}
+              onSelect={setStatusFilter}
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'on_hold', label: 'On Hold' },
+                { value: 'closed', label: 'Closed' },
+                { value: 'cancelled', label: 'Cancelled' },
+              ]}
+            />
+            <FilterPill
+              title="Priority"
+              value={priorityFilter}
+              onSelect={setPriorityFilter}
+              options={[
+                { value: 'high', label: 'High' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'low', label: 'Low' },
+              ]}
+            />
+          </div>
+
+          {/* Clear filters + count */}
+          <div className="flex items-center px-4 pb-2">
+            {hasFilters && (
+              <button
+                onClick={() => { setSearch(''); setStatusFilter(''); setPriorityFilter('') }}
+                className="text-xs text-[#5E6AD2] hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+            <span className="text-xs text-[#999] ml-auto">
+              {loading ? '…' : `${filtered.length} mandate${filtered.length !== 1 ? 's' : ''}`}
+            </span>
+          </div>
+        </div>
+
         {/* Error banner */}
         {error && (
-          <div className="mx-6 mt-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+          <div className="mx-4 sm:mx-6 mt-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
             Failed to load mandates: {error}
           </div>
         )}

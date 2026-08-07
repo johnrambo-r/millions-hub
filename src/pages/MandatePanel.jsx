@@ -8,11 +8,13 @@ import { useAuth } from '../context/AuthContext'
 import {
   STAGES, STAGE_STATUS_MAP, ACTIVE_STATUSES, PLACED_STATUSES, getNextStageOptions, getAllStageOptions,
 } from '../lib/candidateConstants'
-import { InlineDropdown, StagePromptModal } from '../components/pipeline/InlineStageStatus'
+import { InlineDropdown, StagePromptModal, InterviewTimeButton } from '../components/pipeline/InlineStageStatus'
 import { StageBadge, StatusBadge as CandidateStatusBadge } from '../components/pipeline/StageBadge'
 import { logActivity } from '../lib/activityLog'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
+import CandidateCard from '../components/pipeline/CandidateCard'
 import Pagination from '../components/Pagination'
+import FilterPill from '../components/FilterPill'
 import { formatTime12h } from '../lib/formatTime'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -374,7 +376,7 @@ function EditView({ editFields, setEditField, amProfiles, recruiterProfiles, sel
     <div className="space-y-6 max-w-3xl">
       <div>
         <h3 className="text-xs font-semibold text-[#666] uppercase tracking-wider mb-4">Mandate Details</h3>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
           <EditField label="Title" colSpan2>
             <input type="text" value={editFields.title || ''} onChange={(e) => setEditField('title', e.target.value)} className={fldCls} placeholder="e.g. Senior Backend Engineer" />
           </EditField>
@@ -759,6 +761,107 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
           mcId={mc.id}
           supabaseClient={supabase}
           existingData={mc}
+          userId={changedBy}
+          onClose={() => { setPrompt(null); onRefresh() }}
+        />
+      )}
+    </>
+  )
+}
+
+// Mobile card equivalent of CandidateTableRow. Unlink and bulk-select are
+// desktop-only for this pass (mirrors Pipeline's precedent of keeping
+// secondary power actions like Re-assign off the mobile card — see
+// MCCardRow in Pipeline.jsx); stage/status editing reuses the same
+// CandidateCard + StageStatusSheet bottom sheet already established there,
+// and the same InterviewTimeButton → StagePromptModal path for scheduling.
+function CandidateCardRow({ mc, onRefresh, onRowClick, canEdit, mandate }) {
+  const { session }         = useAuth()
+  const { isFounder }       = useRole()
+  const [stage, setStage]   = useState(mc.stage ?? '')
+  const [status, setStatus] = useState(mc.status ?? '')
+  const [prompt, setPrompt] = useState(null)
+
+  const statusOptions = stage ? (STAGE_STATUS_MAP[stage] ?? []) : []
+  const changedBy     = session?.user?.id
+  const days          = daysInStage(mc)
+
+  const interviewStr = mc.interview_date && INTERVIEW_STAGES.has(stage)
+    ? [formatDateShort(mc.interview_date), mc.interview_time ? formatTime12h(mc.interview_time) : null].filter(Boolean).join(' · ')
+    : null
+  const ctcStr     = formatMoney(mc.offered_ctc)
+  const billingStr = formatMoney(mc.billing_value_approx)
+  const dojStr     = mc.date_of_joining ? formatDateShort(mc.date_of_joining) : null
+
+  async function save(updates) {
+    await supabase.from('mandate_candidates').update(updates).eq('id', mc.id)
+  }
+
+  async function handleStageChange(newStage) {
+    const oldStage  = stage
+    const oldStatus = status
+    const newStatus = STAGE_STATUS_MAP[newStage]?.[0] ?? null
+    setStage(newStage)
+    setStatus(newStatus ?? '')
+    await save({ stage: newStage, status: newStatus, status_changed_at: new Date().toISOString() })
+    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'stage', oldValue: oldStage, newValue: newStage })
+    if (oldStatus !== newStatus) {
+      await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    }
+    if (newStage === 'Pre-L1 Assessment' || newStage === 'Post-L1 Assessment') setPrompt({ type: 'assessment' })
+    else if (INTERVIEW_STAGES.has(newStage))  setPrompt({ type: 'interview' })
+    else if (newStage === 'Offer')   setPrompt({ type: 'offer' })
+    else if (newStage === 'Joining') setPrompt({ type: 'joining' })
+    else onRefresh()
+  }
+
+  async function handleStatusChange(newStatus) {
+    const oldStatus = status
+    setStatus(newStatus)
+    await save({ status: newStatus, status_changed_at: new Date().toISOString() })
+    await logActivity({ candidateId: mc.candidate_id, mandateId: mc.mandate_id, applicantId: mc.applicant_id, changedBy, changeType: 'status', oldValue: oldStatus, newValue: newStatus })
+    if (newStatus === 'Invoice Raised') setPrompt({ type: 'invoice' })
+    else onRefresh()
+  }
+
+  return (
+    <>
+      <CandidateCard
+        onClick={() => onRowClick(mc.candidate_id)}
+        applicantId={mc.applicant_id}
+        name={mc.candidate?.name}
+        meta={[mandate?.client?.name, mc.linked_by_profile?.name ? `Recruiter: ${mc.linked_by_profile.name}` : null].filter(Boolean).join(' · ') || undefined}
+        stage={stage}
+        status={status}
+        stageOptions={isFounder ? getAllStageOptions(stage) : getNextStageOptions(stage)}
+        statusOptions={statusOptions}
+        onStageSelect={canEdit ? handleStageChange : undefined}
+        onStatusSelect={canEdit && stage ? handleStatusChange : undefined}
+        interviewButton={
+          <InterviewTimeButton
+            stage={stage}
+            hasTime={!!mc.interview_date}
+            onClick={() => setPrompt({ type: 'interview' })}
+          />
+        }
+        aging={<span className={`text-xs rounded-full px-2 py-0.5 whitespace-nowrap ${daysColor(days)}`}>{days}d</span>}
+        detailLines={[
+          mc.candidate?.phone,
+          mc.candidate?.email,
+          interviewStr ? `Interview: ${interviewStr}` : null,
+          ctcStr ? `CTC: ${ctcStr}` : null,
+          billingStr ? `Billing: ${billingStr}` : null,
+          dojStr ? `DOJ: ${dojStr}` : null,
+          mc.status_changed_at ? `Delivered ${formatRelDate(mc.status_changed_at)}` : null,
+        ].filter(Boolean)}
+      />
+      {prompt && (
+        <StagePromptModal
+          type={prompt.type}
+          mcId={mc.id}
+          supabaseClient={supabase}
+          existingData={mc}
+          userId={changedBy}
           onClose={() => { setPrompt(null); onRefresh() }}
         />
       )}
@@ -770,64 +873,84 @@ function CandidateTableRow({ mc, onRefresh, onRowClick, canEdit, mandate, showBu
 
 function CandidateList({ displayed, loading, onRefresh, onRowClick, isRecruiter, currentUserId, mandate, selectedIds, onToggleSelect, onToggleAll, eligibleIds }) {
   if (loading) {
-    return <p className="px-6 py-10 text-sm text-[#999]">Loading candidates…</p>
+    return <p className="px-4 sm:px-6 py-10 text-sm text-[#999]">Loading candidates…</p>
   }
   if (displayed.length === 0) {
-    return <p className="px-6 py-10 text-sm text-[#999]">No candidates match the current filters.</p>
+    return <p className="px-4 sm:px-6 py-10 text-sm text-[#999]">No candidates match the current filters.</p>
   }
 
   const showBulkCheckbox = !isRecruiter
   const allEligibleSelected = eligibleIds?.length > 0 && eligibleIds.every((id) => selectedIds?.has(id))
 
   return (
-    <table className="w-full border-collapse">
-      <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
-        <tr className="border-b border-[#F0F0F4]">
-          {showBulkCheckbox && (
-            <th className="px-3 py-2.5 w-8">
-              {eligibleIds?.length > 0 && (
-                <input
-                  type="checkbox"
-                  checked={allEligibleSelected}
-                  onChange={onToggleAll}
-                  title="Select all Internal Review"
-                  className="rounded border-[#DDD] accent-[#5E6AD2] cursor-pointer"
-                />
+    <>
+      <div className="hidden md:block">
+        <table className="w-full border-collapse">
+          <thead className="sticky top-0 z-10 bg-[#FAFAFA]">
+            <tr className="border-b border-[#F0F0F4]">
+              {showBulkCheckbox && (
+                <th className="px-3 py-2.5 w-8">
+                  {eligibleIds?.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={allEligibleSelected}
+                      onChange={onToggleAll}
+                      title="Select all Internal Review"
+                      className="rounded border-[#DDD] accent-[#5E6AD2] cursor-pointer"
+                    />
+                  )}
+                </th>
               )}
-            </th>
-          )}
-          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Candidate</th>
-          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Contact</th>
-          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Stage</th>
-          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Status</th>
-          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Details</th>
-          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Recruiter · AM</th>
-          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">In Stage</th>
-          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Delivered</th>
-          <th className="px-4 py-2.5 w-8"></th>
-        </tr>
-      </thead>
-      <tbody>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Candidate</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Contact</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Stage</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Status</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Details</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Recruiter · AM</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">In Stage</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-[#999] uppercase tracking-wider whitespace-nowrap">Delivered</th>
+              <th className="px-4 py-2.5 w-8"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayed.map((mc) => {
+              const canEdit = !isRecruiter || mc.linked_by === currentUserId
+              const isEligible = mc.stage === 'CV' && mc.status === 'Internal Review'
+              return (
+                <CandidateTableRow
+                  key={mc.id}
+                  mc={mc}
+                  onRefresh={onRefresh}
+                  onRowClick={onRowClick}
+                  canEdit={canEdit}
+                  mandate={mandate}
+                  showBulkCheckbox={showBulkCheckbox}
+                  isSelected={selectedIds?.has(mc.id) ?? false}
+                  onToggleSelect={onToggleSelect}
+                  isEligible={isEligible}
+                />
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden">
         {displayed.map((mc) => {
           const canEdit = !isRecruiter || mc.linked_by === currentUserId
-          const isEligible = mc.stage === 'CV' && mc.status === 'Internal Review'
           return (
-            <CandidateTableRow
+            <CandidateCardRow
               key={mc.id}
               mc={mc}
               onRefresh={onRefresh}
               onRowClick={onRowClick}
               canEdit={canEdit}
               mandate={mandate}
-              showBulkCheckbox={showBulkCheckbox}
-              isSelected={selectedIds?.has(mc.id) ?? false}
-              onToggleSelect={onToggleSelect}
-              isEligible={isEligible}
             />
           )
         })}
-      </tbody>
-    </table>
+      </div>
+    </>
   )
 }
 
@@ -1158,7 +1281,7 @@ export default function MandatePanel() {
   if (fetchError || !mandate) {
     return (
       <AppShell title="Mandate">
-        <div className="px-6 py-6">
+        <div className="px-4 sm:px-6 py-6">
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
             {fetchError || 'Mandate not found.'}
           </div>
@@ -1175,7 +1298,7 @@ export default function MandatePanel() {
   return (
     <AppShell title={mandate.title}>
       {/* Sticky page header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-[#F0F0F4] px-6 py-3 flex items-center justify-between gap-4">
+      <div className="sticky top-0 z-10 bg-white border-b border-[#F0F0F4] px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate('/mandates')}
@@ -1247,7 +1370,7 @@ export default function MandatePanel() {
       <SnapshotStrip mandateCandidates={mandateCandidates} mandate={mandate} />
 
       {/* Tab bar */}
-      <div className="flex border-b border-[#F0F0F4] px-6">
+      <div className="flex border-b border-[#F0F0F4] px-4 sm:px-6">
         <button
           onClick={() => setActiveTab('details')}
           className={`py-2.5 mr-5 text-sm font-medium border-b-2 transition-colors ${
@@ -1275,7 +1398,7 @@ export default function MandatePanel() {
 
       {/* Details tab */}
       {activeTab === 'details' && (
-        <div className="px-6 pt-5 pb-8">
+        <div className="px-4 sm:px-6 pt-5 pb-8">
           {isEditing ? (
             <EditView
               editFields={editFields}
@@ -1294,8 +1417,8 @@ export default function MandatePanel() {
       {/* Candidates tab */}
       {activeTab === 'candidates' && (
         <div className="flex-1 overflow-auto flex flex-col min-h-0">
-          {/* Filter bar */}
-          <div className="px-5 py-3 border-b border-[#F0F0F4] bg-white flex items-center gap-3 flex-wrap shrink-0">
+          {/* Filter bar — desktop */}
+          <div className="hidden md:flex px-5 py-3 border-b border-[#F0F0F4] bg-white items-center gap-3 flex-wrap shrink-0">
             {/* Search */}
             <div className="relative">
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -1368,6 +1491,68 @@ export default function MandatePanel() {
                 {filteredCandidates.length} candidate{filteredCandidates.length !== 1 ? 's' : ''}
               </span>
             )}
+          </div>
+
+          {/* Filter bar — mobile. Bulk-select/Submit to Client stays desktop-only
+              for this pass, matching the mobile card's own scope (see
+              CandidateCardRow above). */}
+          <div className="md:hidden border-b border-[#F0F0F4] bg-white shrink-0">
+            <div className="px-4 pt-3 pb-2">
+              <div className="relative">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#999] pointer-events-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="6.5" cy="6.5" r="4.5" /><path d="M10.5 10.5l3 3" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search name or email…"
+                  value={candidateSearch}
+                  onChange={(e) => setCandidateSearch(e.target.value)}
+                  className="h-8 pl-8 pr-3 rounded-lg border border-[#F0F0F4] bg-white text-sm text-[#0F0F12] placeholder-[#999] focus:outline-none focus:ring-2 focus:ring-[#5E6AD2]/30 focus:border-[#5E6AD2] transition w-full"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 px-4 pb-2 overflow-x-auto">
+              <FilterPill
+                title="Stage"
+                value={stageFilter}
+                onSelect={(v) => { setStageFilter(v); setStatusFilter('') }}
+                options={STAGES.map((s) => ({ value: s, label: s }))}
+              />
+              <FilterPill
+                title="Status"
+                value={statusFilter}
+                onSelect={setStatusFilter}
+                options={candidateStatusOptions.map((s) => ({ value: s, label: s }))}
+              />
+              {!isRecruiter && workingRecruiters.length > 0 && (
+                <FilterPill
+                  title="Recruiters"
+                  value={recruiterFilter}
+                  onSelect={setRecruiterFilter}
+                  options={workingRecruiters.map((r) => ({ value: r.id, label: r.name }))}
+                />
+              )}
+              <select value={candidateSortBy} onChange={(e) => setCandidateSortBy(e.target.value)} className={`${selCls} shrink-0`}>
+                <option value="last_updated">Sort: Last updated</option>
+                <option value="stage">Sort: Stage</option>
+                <option value="days_in_stage">Sort: Days in stage ↓</option>
+              </select>
+            </div>
+
+            <div className="flex items-center px-4 pb-2">
+              {hasCandidateFilters && (
+                <button
+                  onClick={() => { setCandidateSearch(''); setStageFilter(''); setStatusFilter(''); setRecruiterFilter('') }}
+                  className="text-xs text-[#5E6AD2] hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
+              <span className="text-xs text-[#999] ml-auto">
+                {filteredCandidates.length} candidate{filteredCandidates.length !== 1 ? 's' : ''}
+              </span>
+            </div>
           </div>
 
           <CandidateList
