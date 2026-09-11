@@ -1,6 +1,6 @@
 import {
   IconDashboard, IconPipeline, IconAddCandidate, IconClients,
-  IconSettings, IconUsers, IconMandates,
+  IconSettings, IconUsers, IconMandates, IconTalentSearch,
 } from './NavIcons'
 
 // Single source of truth for role-based nav items, shared by the desktop
@@ -11,6 +11,7 @@ export const FOUNDER_NAV = [
   { to: '/pipeline', icon: IconPipeline, label: 'Candidates' },
   { to: '/clients', icon: IconClients, label: 'Clients' },
   { to: '/mandates', icon: IconMandates, label: 'Mandates' },
+  { to: '/talent-search', icon: IconTalentSearch, label: 'Talent Search' },
   { to: '/users', icon: IconUsers, label: 'Users' },
   { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
   { to: '/settings', icon: IconSettings, label: 'Settings' },
@@ -21,6 +22,7 @@ export const ACCOUNT_MANAGER_NAV = [
   { to: '/pipeline', icon: IconPipeline, label: 'Candidates' },
   { to: '/clients', icon: IconClients, label: 'Clients' },
   { to: '/mandates', icon: IconMandates, label: 'Mandates' },
+  { to: '/talent-search', icon: IconTalentSearch, label: 'Talent Search' },
   { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
   { to: '/settings', icon: IconSettings, label: 'Settings' },
 ]
@@ -29,6 +31,7 @@ export const RECRUITER_NAV = [
   { to: '/dashboard', icon: IconDashboard, label: 'Dashboard' },
   { to: '/pipeline', icon: IconPipeline, label: 'Candidates' },
   { to: '/mandates', icon: IconMandates, label: 'Mandates' },
+  { to: '/talent-search', icon: IconTalentSearch, label: 'Talent Search' },
   { to: '/add', icon: IconAddCandidate, label: 'Add Candidate' },
   { to: '/settings', icon: IconSettings, label: 'Settings' },
 ]

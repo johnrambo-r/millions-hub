@@ -38,7 +38,7 @@ const TABS = [
   { id: 'all',         label: 'All' },
 ]
 
-const CANDIDATE_FIELDS = `
+export const CANDIDATE_FIELDS = `
   id, name, email, phone, alt_contact,
   current_location, hometown, preferred_location, willing_to_relocate,
   education, year_of_passing,

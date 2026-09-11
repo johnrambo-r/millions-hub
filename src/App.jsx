@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import Pipeline from './pages/Pipeline'
+import TalentSearch from './pages/TalentSearch'
 import Clients from './pages/Clients'
 import AddCandidate from './pages/AddCandidate'
 import Settings from './pages/Settings'
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
           <Route path="/pipeline" element={<Protected><Pipeline /></Protected>} />
+          <Route path="/talent-search" element={<Protected><TalentSearch /></Protected>} />
           <Route path="/clients" element={<Protected><Clients /></Protected>} />
           <Route path="/clients/:id" element={<Protected><ClientPage /></Protected>} />
           <Route path="/add" element={<Protected><AddCandidate /></Protected>} />
