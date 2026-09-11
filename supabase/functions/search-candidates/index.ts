@@ -1,6 +1,8 @@
 // Natural-language candidate search: embeds the recruiter's query text via OpenAI, then ranks
 // candidates against it using search_candidates_by_embedding()
-// (20260911020000_search_candidates_by_embedding.sql).
+// (20260911020000_search_candidates_by_embedding.sql, paginated in
+// 20260911070000_paginate_search_candidates_by_embedding.sql to match Advanced Search's numbered
+// pagination — page/page_size in the request body map straight to the RPC's p_page_num/p_page_size).
 //
 // verify_jwt = true (supabase/config.toml) -- unlike extract-resume/embed-resume, this function is
 // called directly from the browser with the signed-in user's own JWT, so the platform gateway
@@ -15,7 +17,7 @@ import { createClient } from "@supabase/supabase-js";
 const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const MAX_QUERY_CHARS = 2000;
-const DEFAULT_MATCH_COUNT = 20;
+const DEFAULT_PAGE_SIZE = 20; // matches Advanced Search's search_candidates_by_filters default
 
 // This function is called directly from the browser (unlike extract-resume/embed-resume, which
 // are only ever called server-to-server by pg_cron/pg_net), so it needs to handle the CORS
@@ -69,7 +71,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { query, match_count } = await req.json().catch(() => ({}));
+    const { query, page, page_size } = await req.json().catch(() => ({}));
 
     if (typeof query !== "string" || !query.trim()) {
       return jsonResponse({ error: "query is required" }, 400);
@@ -86,12 +88,14 @@ Deno.serve(async (req) => {
 
     const { data, error } = await supabase.rpc("search_candidates_by_embedding", {
       query_embedding: queryEmbedding,
-      match_count: Math.min(Math.max(Number(match_count) || DEFAULT_MATCH_COUNT, 1), 50),
+      p_page_num: Math.max(Number(page) || 1, 1),
+      p_page_size: Math.min(Math.max(Number(page_size) || DEFAULT_PAGE_SIZE, 1), 50),
     });
 
     if (error) return jsonResponse({ error: error.message }, 500);
 
-    return jsonResponse({ results: data ?? [] });
+    const total = data?.[0]?.total_count ?? 0;
+    return jsonResponse({ results: data ?? [], total });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[search-candidates] error:", message);

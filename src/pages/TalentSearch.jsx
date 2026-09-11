@@ -73,16 +73,22 @@ function SmartSearchResults({ results, loading, error, onSelect }) {
 
 function SmartSearchTab({ onSelect }) {
   const [query, setQuery] = useState('')
-  const { results, loading, error } = useCandidateSearch(query)
+  const [page, setPage] = useState(1)
+  const { results, total, loading, error, pageSize } = useCandidateSearch(query, page)
+
+  function handleQueryChange(value) {
+    setQuery(value)
+    setPage(1)
+  }
 
   return (
     <>
       <CandidateSearchBar
         value={query}
-        onChange={setQuery}
+        onChange={handleQueryChange}
         loading={loading}
         error={error}
-        resultCount={results.length}
+        resultCount={total}
       />
       <div className="flex-1 overflow-auto px-4 sm:px-6 py-4">
         {query.trim() ? (
@@ -91,6 +97,9 @@ function SmartSearchTab({ onSelect }) {
           <SmartSearchEmptyPrompt />
         )}
       </div>
+      {query.trim() && !loading && total > 0 && (
+        <Pagination total={total} page={page} perPage={pageSize} onChange={setPage} />
+      )}
     </>
   )
 }
