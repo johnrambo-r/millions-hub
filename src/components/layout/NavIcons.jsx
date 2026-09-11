@@ -94,3 +94,15 @@ export function IconReports({ className }) {
     </svg>
   )
 }
+
+// Deliberately not another magnifying glass (that's IconSearch, the global Cmd+K palette) --
+// a filled AI "sparkle" glyph, the only icon in this file with no literal outlined object, so it
+// reads as distinct at a glance from every other nav item.
+export function IconTalentSearch({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor" stroke="none">
+      <path d="M10 2c.7 3.6 2.5 5.4 6 6-3.5.6-5.3 2.4-6 6-.7-3.6-2.5-5.4-6-6 3.5-.6 5.3-2.4 6-6z" />
+      <path d="M15.7 13c.3 1.15.85 1.7 2 2-1.15.3-1.7.85-2 2-.3-1.15-.85-1.7-2-2 1.15-.3 1.7-.85 2-2z" />
+    </svg>
+  )
+}

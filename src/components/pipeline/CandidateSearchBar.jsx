@@ -1,8 +1,8 @@
-// Natural-language search row for the Candidates screen (src/pages/Pipeline.jsx). Deliberately a
-// full-width row of its own between the tab bar and the existing filter bars, rather than living
-// inside either — the filter bars already own a per-tab keyword `search` input tied to
-// client-side filtering of the current tab's rows; this is a separate, DB-backed semantic search
-// across all candidates, and mixing the two inputs would be confusing.
+// Natural-language search input for the dedicated Talent Search page (src/pages/TalentSearch.jsx).
+// Originally lived inline on the Candidates screen (Pipeline.jsx) between its tab bar and filter
+// bars; moved to its own page so it doesn't compete with Pipeline's existing per-tab keyword
+// `search` filter, and so it has room to grow (filters, saved searches) without crowding that
+// screen's already-dense toolbar.
 export default function CandidateSearchBar({ value, onChange, loading, resultCount, error }) {
   return (
     <div className="px-4 sm:px-6 py-3 border-b border-[#F0F0F4] bg-white shrink-0">
