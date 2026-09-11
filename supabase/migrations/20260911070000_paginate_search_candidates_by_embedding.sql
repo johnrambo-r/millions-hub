@@ -4,10 +4,17 @@
 -- via count(*) OVER() in the same query (computed before LIMIT/OFFSET apply, so it reflects the
 -- full similarity-ranked set across all pages) -- one round trip, no separate COUNT query.
 --
--- DROP + CREATE, not CREATE OR REPLACE: Postgres refuses to change a function's RETURNS TABLE
--- column set in place (adding total_count) -- has to be dropped and recreated. No other DB
--- object references this function (only supabase/functions/search-candidates/index.ts calls it),
--- so this is safe.
+-- Deliberately ADDS a new overload (3-param: query_embedding, p_page_num, p_page_size) rather
+-- than dropping and replacing the existing 2-param one (query_embedding, match_count) --
+-- Postgres treats different parameter signatures as distinct function objects that can coexist
+-- under the same name, and PostgREST/supabase-js resolve an .rpc() call to the matching
+-- overload by which named parameters are actually passed. That means the *currently-deployed*
+-- search-candidates Edge Function (still calling {query_embedding, match_count}) keeps working
+-- unmodified against the untouched old overload no matter when this migration lands, and only
+-- switches over once it's *also* redeployed with the new parameter names -- no ordering to get
+-- right between "apply migration" and "redeploy function," and no window where a search request
+-- hits a parameter name that doesn't exist on either side. The old 2-param overload is safe to
+-- drop in a later cleanup migration once the redeploy is confirmed stable; not done here.
 --
 -- Stable ordering across pages: `ORDER BY embedding <=> query_embedding` alone has no tiebreaker,
 -- so two candidates at (or extremely close to) equal distance from the query could in principle
@@ -23,8 +30,6 @@
 -- offset) -- a real technique, but a bigger change than asked for here, and it would make Smart
 -- Search's pagination behave differently from Advanced Search's, undoing the "match exactly"
 -- goal. Flagging as an accepted, shared tradeoff rather than building it silently either way.
-DROP FUNCTION IF EXISTS search_candidates_by_embedding(vector, integer);
-
 CREATE OR REPLACE FUNCTION search_candidates_by_embedding(
   query_embedding vector(1536),
   p_page_num      integer DEFAULT 1,
