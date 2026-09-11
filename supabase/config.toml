@@ -15,3 +15,21 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/send-interview-reminders/deno.json"
 entrypoint = "./functions/send-interview-reminders/index.ts"
+
+[functions.extract-resume]
+enabled = true
+verify_jwt = false
+import_map = "./functions/extract-resume/deno.json"
+entrypoint = "./functions/extract-resume/index.ts"
+
+[functions.embed-resume]
+enabled = true
+verify_jwt = false
+import_map = "./functions/embed-resume/deno.json"
+entrypoint = "./functions/embed-resume/index.ts"
+
+[functions.search-candidates]
+enabled = true
+verify_jwt = true
+import_map = "./functions/search-candidates/deno.json"
+entrypoint = "./functions/search-candidates/index.ts"

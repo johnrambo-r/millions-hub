@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "jsr:@supabase/supabase-js@^2",
+    "mammoth": "npm:mammoth@1.12.0",
+    "pdfjs-dist": "npm:pdfjs-dist@5.7.284/legacy/build/pdf.mjs"
+  }
+}

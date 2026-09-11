@@ -7,10 +7,12 @@ import { StageBadge, StatusBadge } from '../components/pipeline/StageBadge'
 import { InlineDropdown, StagePromptModal, InterviewTimeButton } from '../components/pipeline/InlineStageStatus'
 import CandidateCard from '../components/pipeline/CandidateCard'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
+import CandidateSearchBar from '../components/pipeline/CandidateSearchBar'
 import AssignMandateModal from '../components/AssignMandateModal'
 import SuccessToast from '../components/add-candidate/SuccessToast'
 import { useProfile } from '../hooks/useProfile'
 import { useAuth } from '../context/AuthContext'
+import useCandidateSearch from '../hooks/useCandidateSearch'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activityLog'
 import { formatTime12h } from '../lib/formatTime'
@@ -1140,6 +1142,36 @@ function AllCandidatesTable({ rows, loading, onSelect, onRefresh }) {
   )
 }
 
+// Ranked results for the natural-language resume search (CandidateSearchBar). Renders as a plain
+// list on both desktop and mobile via CandidateCard — search results are a distinct view from the
+// tab-specific tables above (no stage/status/mandate context to show, and no dedicated desktop
+// table was built for this since a card list already reads fine at this row count), not a clone
+// of any one tab's layout.
+function SemanticSearchResults({ results, loading, error, onSelect }) {
+  if (loading) return <LoadingState />
+  if (error) return <EmptyState message={error} />
+  if (results.length === 0) return <EmptyState message="No matching candidates found" />
+
+  return (
+    <div className="max-w-2xl">
+      {results.map((r) => (
+        <CandidateCard
+          key={r.id}
+          onClick={() => onSelect(r.id)}
+          name={r.name}
+          meta={[r.skill_role, r.current_company].filter(Boolean).join(' · ') || undefined}
+          detailLines={[
+            r.current_location,
+            r.total_exp != null ? `${r.total_exp} yrs experience` : null,
+            r.phone,
+            `${Math.round(r.similarity * 100)}% match`,
+          ].filter(Boolean)}
+        />
+      ))}
+    </div>
+  )
+}
+
 // ─── page ────────────────────────────────────────────────────────────────────
 
 export default function Pipeline() {
@@ -1161,6 +1193,13 @@ export default function Pipeline() {
   const [statusFilter, setStatusFilter]   = useState('')
   const [clientFilter, setClientFilter]   = useState('')
   const [recruiterFilter, setRecruiterFilter] = useState('')
+
+  // Natural-language semantic search — distinct from `search` above (that's the existing
+  // per-tab keyword filter over already-fetched rows; this hits search-candidates for a
+  // DB-ranked, cross-tab match over all candidates' resume text).
+  const [nlQuery, setNlQuery] = useState('')
+  const { results: semanticResults, loading: nlSearchLoading, error: nlSearchError } = useCandidateSearch(nlQuery)
+  const isSearching = nlQuery.trim().length > 0
 
   const [selectedCandidate, setSelectedCandidate] = useState(null)
   const [pendingSelect, setPendingSelect]         = useState(null)
@@ -1390,6 +1429,7 @@ export default function Pipeline() {
     setStatusFilter('')
     setClientFilter('')
     setRecruiterFilter('')
+    setNlQuery('')
     setPage(1)
   }
 
@@ -1399,6 +1439,15 @@ export default function Pipeline() {
     } else if (selectedCandidate.id !== candidate.id) {
       setPendingSelect(candidate)
     }
+  }
+
+  // Search results only carry the reduced field set search_candidates_by_embedding returns (see
+  // 20260911020000_search_candidates_by_embedding.sql), not the full CANDIDATE_FIELDS shape
+  // CandidatePanel expects to seed its edit form — so fetch the full row before opening the
+  // panel, same as the openCandidateId effect above does for cross-page navigation.
+  async function handleSearchResultClick(id) {
+    const { data } = await supabase.from('candidates').select(CANDIDATE_FIELDS).eq('id', id).single()
+    if (data) handleSelect(data)
   }
 
   const hasActiveFilters = search || stageFilter || statusFilter || clientFilter || recruiterFilter
@@ -1451,6 +1500,15 @@ export default function Pipeline() {
             </button>
           ))}
         </div>
+
+        {/* Semantic resume search — sits above both filter bars, doesn't touch either */}
+        <CandidateSearchBar
+          value={nlQuery}
+          onChange={setNlQuery}
+          loading={nlSearchLoading}
+          error={nlSearchError}
+          resultCount={semanticResults.length}
+        />
 
         {/* Filter bar — desktop */}
         <div className="hidden md:flex px-6 py-3 border-b border-[#F0F0F4] bg-white items-center gap-3 flex-wrap shrink-0">
@@ -1618,7 +1676,14 @@ export default function Pipeline() {
 
         {/* Table */}
         <div className="flex-1 overflow-auto">
-          {isNewLayoutTab ? (
+          {isSearching ? (
+            <SemanticSearchResults
+              results={semanticResults}
+              loading={nlSearchLoading}
+              error={nlSearchError}
+              onSelect={handleSearchResultClick}
+            />
+          ) : isNewLayoutTab ? (
             <NewMCTable
               rows={paginated}
               loading={loading}
@@ -1650,7 +1715,7 @@ export default function Pipeline() {
             />
           )}
         </div>
-        {!loading && filtered.length > 0 && (
+        {!isSearching && !loading && filtered.length > 0 && (
           <div className="pb-3 md:pb-0">
             <Pagination total={filtered.length} page={page} onChange={setPage} />
           </div>
