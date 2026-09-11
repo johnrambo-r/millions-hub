@@ -8,7 +8,7 @@ import SuccessToast from '../components/add-candidate/SuccessToast'
 import AssignMandateModal from '../components/AssignMandateModal'
 import { useProfile } from '../hooks/useProfile'
 import { supabase } from '../lib/supabase'
-import { QUALIFICATIONS, NOTICE_PERIODS, PASSING_YEARS } from '../lib/candidateConstants'
+import { QUALIFICATIONS, NOTICE_PERIODS, PASSING_YEARS, CURRENTLY_RESIDING_OPTIONS } from '../lib/candidateConstants'
 
 // ─── constants ─────────────────────────────────────────────────────────────
 
@@ -20,6 +20,7 @@ const INITIAL = {
   name: '', email: '', phone: '', alt_contact: '',
   // Location
   current_location: '', hometown: '', preferred_location: '', willing_to_relocate: false,
+  currently_residing_in: '', currently_residing_in_other: '',
   // Professional
   current_company: '', skill_role: '', emp_mode: '', payroll_company: '',
   total_exp: '', relevant_exp: '',
@@ -45,6 +46,9 @@ function validate(f, resumeUpload) {
   if (!f.current_location.trim())   e.current_location = 'Required'
   if (!f.hometown.trim())           e.hometown         = 'Required'
   if (!f.preferred_location.trim()) e.preferred_location = 'Required'
+  if (!f.currently_residing_in)     e.currently_residing_in = 'Required'
+  if (f.currently_residing_in === 'other' && !f.currently_residing_in_other.trim())
+                                    e.currently_residing_in_other = 'Required'
   if (!f.current_company.trim())    e.current_company  = 'Required'
   if (!f.skill_role.trim())         e.skill_role       = 'Required'
   if (f.total_exp === '')           e.total_exp        = 'Required'
@@ -263,6 +267,8 @@ export default function AddCandidate() {
       hometown:            form.hometown.trim(),
       preferred_location:  form.preferred_location.trim(),
       willing_to_relocate: form.willing_to_relocate,
+      currently_residing_in: form.currently_residing_in,
+      currently_residing_in_other: form.currently_residing_in === 'other' ? form.currently_residing_in_other.trim() : null,
       // Professional
       current_company: form.current_company.trim(),
       skill_role:      form.skill_role.trim(),
@@ -379,6 +385,35 @@ export default function AddCandidate() {
             </FormField>
             <FormField label="Hometown" required error={errors.hometown}>
               <input type="text" value={form.hometown} onChange={(e) => setField('hometown', e.target.value)} placeholder="Bengaluru" className={inputCls(errors.hometown)} />
+            </FormField>
+            <FormField label="Currently residing in" required error={errors.currently_residing_in} className="col-span-2">
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  {CURRENTLY_RESIDING_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setField('currently_residing_in', opt.value)}
+                      className={`h-9 px-4 rounded-full text-sm font-medium border transition ${
+                        form.currently_residing_in === opt.value
+                          ? 'bg-[#5E6AD2] text-white border-[#5E6AD2]'
+                          : 'bg-white text-[#666] border-[#F0F0F4] hover:bg-[#F5F5F8]'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {form.currently_residing_in === 'other' && (
+                  <input
+                    type="text"
+                    value={form.currently_residing_in_other}
+                    onChange={(e) => setField('currently_residing_in_other', e.target.value)}
+                    placeholder="City name"
+                    className={`${inputCls(errors.currently_residing_in_other)} flex-1 min-w-[160px]`}
+                  />
+                )}
+              </div>
             </FormField>
             <FormField label="Preferred location" required error={errors.preferred_location}>
               <input type="text" value={form.preferred_location} onChange={(e) => setField('preferred_location', e.target.value)} placeholder="Bengaluru" className={inputCls(errors.preferred_location)} />

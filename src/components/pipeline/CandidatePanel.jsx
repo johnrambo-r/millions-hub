@@ -5,7 +5,7 @@ import { StageBadge, StatusBadge } from './StageBadge'
 import { InlineDropdown, StagePromptModal, InterviewTimeButton } from './InlineStageStatus'
 import StageStatusSheet from './StageStatusSheet'
 import {
-  QUALIFICATIONS, PASSING_YEARS, NOTICE_PERIODS,
+  QUALIFICATIONS, PASSING_YEARS, NOTICE_PERIODS, CURRENTLY_RESIDING_OPTIONS,
   STAGE_STATUS_MAP, getNextStageOptions, getAllStageOptions,
 } from '../../lib/candidateConstants'
 import UnsavedChangesModal from '../UnsavedChangesModal'
@@ -32,6 +32,13 @@ function EditField({ label, children, colSpan2 = false }) {
       {children}
     </div>
   )
+}
+
+function formatCurrentlyResidingIn(candidate) {
+  const v = candidate?.currently_residing_in
+  if (!v) return null
+  if (v === 'other') return candidate.currently_residing_in_other || 'Other'
+  return CURRENTLY_RESIDING_OPTIONS.find((opt) => opt.value === v)?.label ?? v
 }
 
 function formatDate(str) {
@@ -515,6 +522,8 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       current_location:     candidate.current_location ?? '',
       hometown:             candidate.hometown ?? '',
       preferred_location:   candidate.preferred_location ?? '',
+      currently_residing_in:       candidate.currently_residing_in ?? '',
+      currently_residing_in_other: candidate.currently_residing_in_other ?? '',
       education:            candidate.education ?? '',
       year_of_passing:      candidate.year_of_passing?.toString() ?? '',
       current_company:      candidate.current_company ?? '',
@@ -621,6 +630,10 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
       current_location:   editFields.current_location.trim() || null,
       hometown:           editFields.hometown.trim() || null,
       preferred_location: editFields.preferred_location.trim() || null,
+      currently_residing_in: editFields.currently_residing_in || null,
+      currently_residing_in_other: editFields.currently_residing_in === 'other'
+        ? (editFields.currently_residing_in_other.trim() || null)
+        : null,
       education:          editFields.education || null,
       year_of_passing:    editFields.year_of_passing ? parseInt(editFields.year_of_passing, 10) : null,
       current_company:    editFields.current_company.trim() || null,
@@ -1171,6 +1184,35 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                 <EditField label="Hometown">
                   <input type="text" value={editFields.hometown || ''} onChange={(e) => setEditField('hometown', e.target.value)} className={fldCls} />
                 </EditField>
+                <EditField label="Currently residing in" colSpan2>
+                  <div className="flex flex-wrap items-start gap-3">
+                    <div className="flex flex-wrap gap-2 shrink-0">
+                      {CURRENTLY_RESIDING_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setEditField('currently_residing_in', opt.value)}
+                          className={`h-9 px-4 rounded-full text-sm font-medium border transition ${
+                            editFields.currently_residing_in === opt.value
+                              ? 'bg-[#5E6AD2] text-white border-[#5E6AD2]'
+                              : 'bg-white text-[#666] border-[#F0F0F4] hover:bg-[#F5F5F8]'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    {editFields.currently_residing_in === 'other' && (
+                      <input
+                        type="text"
+                        value={editFields.currently_residing_in_other || ''}
+                        onChange={(e) => setEditField('currently_residing_in_other', e.target.value)}
+                        placeholder="City name"
+                        className={`${fldCls} flex-1 min-w-[160px]`}
+                      />
+                    )}
+                  </div>
+                </EditField>
                 <EditField label="Preferred location">
                   <input type="text" value={editFields.preferred_location || ''} onChange={(e) => setEditField('preferred_location', e.target.value)} className={fldCls} />
                 </EditField>
@@ -1334,6 +1376,7 @@ export default function CandidatePanel({ candidate, onClose, onUpdate, pendingSe
                 <Field label="Alt contact">{candidate?.alt_contact}</Field>
                 <Field label="Current location">{candidate?.current_location}</Field>
                 <Field label="Hometown">{candidate?.hometown}</Field>
+                <Field label="Currently residing in" colSpan2>{formatCurrentlyResidingIn(candidate)}</Field>
                 <Field label="Preferred location">{candidate?.preferred_location}</Field>
                 <Field label="Education">{candidate?.education}</Field>
                 <Field label="Year of passing">{candidate?.year_of_passing}</Field>
