@@ -2,6 +2,12 @@ export const QUALIFICATIONS = [
   'B.E / B.Tech', 'MBA', 'MCA', 'BCA', 'B.Sc', 'B.Com', 'Diploma', 'Other',
 ]
 
+export const CURRENTLY_RESIDING_OPTIONS = [
+  { value: 'current_location', label: 'Current location' },
+  { value: 'hometown', label: 'Hometown' },
+  { value: 'other', label: 'Other' },
+]
+
 export const NOTICE_PERIODS = [
   'Immediate', '15 days', '30 days', '45 days', '60 days', '90 days', 'Serving notice',
 ]
