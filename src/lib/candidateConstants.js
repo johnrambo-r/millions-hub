@@ -1,5 +1,5 @@
 export const QUALIFICATIONS = [
-  'B.E / B.Tech', 'MBA', 'MCA', 'BCA', 'B.Sc', 'B.Com', 'Diploma', 'Other',
+  'B.E / B.Tech', 'M.E / M.Tech', 'MBA', 'MCA', 'BCA', 'B.Sc', 'B.Com', 'Diploma', 'Other',
 ]
 
 export const CURRENTLY_RESIDING_OPTIONS = [
