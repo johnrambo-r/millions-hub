@@ -17,6 +17,26 @@ const EMBEDDING_MODEL = "text-embedding-3-small";
 const MAX_QUERY_CHARS = 2000;
 const DEFAULT_MATCH_COUNT = 20;
 
+// This function is called directly from the browser (unlike extract-resume/embed-resume, which
+// are only ever called server-to-server by pg_cron/pg_net), so it needs to handle the CORS
+// preflight (OPTIONS) request browsers send before a cross-origin POST with a JSON body and
+// custom headers (Authorization, apikey) -- Supabase Edge Functions don't add these
+// automatically. Access-Control-Allow-Origin: * is safe here since auth is a Bearer token
+// (verify_jwt = true at the gateway), not cookies -- there's no credential to leak to another
+// origin by allowing any origin to read the response.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 async function embedQuery(text: string): Promise<number[]> {
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
@@ -42,11 +62,17 @@ async function embedQuery(text: string): Promise<number[]> {
 }
 
 Deno.serve(async (req) => {
+  // Preflight: the browser sends this before the real POST and requires a CORS-headers-bearing
+  // response before it will even attempt the actual request.
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   try {
     const { query, match_count } = await req.json().catch(() => ({}));
 
     if (typeof query !== "string" || !query.trim()) {
-      return Response.json({ error: "query is required" }, { status: 400 });
+      return jsonResponse({ error: "query is required" }, 400);
     }
 
     const authHeader = req.headers.get("Authorization") ?? "";
@@ -63,12 +89,12 @@ Deno.serve(async (req) => {
       match_count: Math.min(Math.max(Number(match_count) || DEFAULT_MATCH_COUNT, 1), 50),
     });
 
-    if (error) return Response.json({ error: error.message }, { status: 500 });
+    if (error) return jsonResponse({ error: error.message }, 500);
 
-    return Response.json({ results: data ?? [] });
+    return jsonResponse({ results: data ?? [] });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[search-candidates] error:", message);
-    return Response.json({ error: message }, { status: 500 });
+    return jsonResponse({ error: message }, 500);
   }
 });
