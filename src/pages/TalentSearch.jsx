@@ -1,19 +1,38 @@
 import { useState } from 'react'
 import AppShell from '../components/layout/AppShell'
 import CandidateSearchBar from '../components/pipeline/CandidateSearchBar'
+import AdvancedSearchFilters from '../components/pipeline/AdvancedSearchFilters'
 import CandidateCard from '../components/pipeline/CandidateCard'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
+import Pagination from '../components/Pagination'
 import useCandidateSearch from '../hooks/useCandidateSearch'
+import useCandidateFilterSearch from '../hooks/useCandidateFilterSearch'
 import { supabase } from '../lib/supabase'
 import { CANDIDATE_FIELDS } from './Pipeline'
 
-// Dedicated home for natural-language resume search — relocated from an inline bar on the
-// Candidates screen (Pipeline.jsx) to its own nav entry, since it's a distinct discovery tool
-// ("find candidates by skills/experience I'm describing") rather than a filter over a list the
-// recruiter is already browsing. Same functionality as before, just a new home: no new features
-// (filters, saved searches, etc. are later phases).
+// Two search modes on one page: Advanced Search (keyword + structured filters, Postgres
+// full-text search — genuinely filterable, opens first by default) and Smart Search (semantic/
+// conceptual, pgvector — ranks by similarity, doesn't filter). Kept as tabs on the same page
+// rather than two nav entries since they're both "find a candidate," just two different tools
+// for it; selection/CandidatePanel state is shared across both so switching tabs doesn't lose
+// or duplicate an open panel.
 
-function EmptyPrompt() {
+const TABS = [
+  { id: 'advanced', label: 'Advanced Search' },
+  { id: 'smart', label: 'Smart Search' },
+]
+
+function LoadingState() {
+  return <p className="text-sm text-[#999] text-center py-16">Searching…</p>
+}
+
+function EmptyState({ message }) {
+  return <p className="text-sm text-[#999] text-center py-16">{message}</p>
+}
+
+// ─── Smart Search (unchanged behavior, just extracted into its own tab component) ────────────
+
+function SmartSearchEmptyPrompt() {
   return (
     <div className="flex flex-col items-center justify-center text-center py-20 px-6">
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-8 h-8 text-[#5E6AD2] mb-3">
@@ -27,15 +46,7 @@ function EmptyPrompt() {
   )
 }
 
-function LoadingState() {
-  return <p className="text-sm text-[#999] text-center py-16">Searching…</p>
-}
-
-function EmptyState({ message }) {
-  return <p className="text-sm text-[#999] text-center py-16">{message}</p>
-}
-
-function SearchResults({ results, loading, error, onSelect }) {
+function SmartSearchResults({ results, loading, error, onSelect }) {
   if (loading) return <LoadingState />
   if (error) return <EmptyState message={error} />
   if (results.length === 0) return <EmptyState message="No matching candidates found" />
@@ -60,9 +71,93 @@ function SearchResults({ results, loading, error, onSelect }) {
   )
 }
 
-export default function TalentSearch() {
+function SmartSearchTab({ onSelect }) {
   const [query, setQuery] = useState('')
   const { results, loading, error } = useCandidateSearch(query)
+
+  return (
+    <>
+      <CandidateSearchBar
+        value={query}
+        onChange={setQuery}
+        loading={loading}
+        error={error}
+        resultCount={results.length}
+      />
+      <div className="flex-1 overflow-auto px-4 sm:px-6 py-4">
+        {query.trim() ? (
+          <SmartSearchResults results={results} loading={loading} error={error} onSelect={onSelect} />
+        ) : (
+          <SmartSearchEmptyPrompt />
+        )}
+      </div>
+    </>
+  )
+}
+
+// ─── Advanced Search ────────────────────────────────────────────────────────────────────────
+
+const INITIAL_FILTERS = {
+  keyword: '', expMin: '', expMax: '', location: '', company: '', education: '',
+  addedAfter: '', addedBefore: '',
+}
+
+function AdvancedSearchResults({ results, loading, error, onSelect }) {
+  if (loading) return <LoadingState />
+  if (error) return <EmptyState message={error} />
+  if (results.length === 0) return <EmptyState message="No matching candidates found" />
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      {results.map((r) => (
+        <CandidateCard
+          key={r.id}
+          onClick={() => onSelect(r.id)}
+          name={r.name}
+          meta={[r.skill_role, r.current_company].filter(Boolean).join(' · ') || undefined}
+          detailLines={[
+            r.current_location,
+            r.total_exp != null ? `${r.total_exp} yrs experience` : null,
+            r.education,
+            r.phone,
+          ].filter(Boolean)}
+        />
+      ))}
+    </div>
+  )
+}
+
+function AdvancedSearchTab({ onSelect }) {
+  const [filters, setFilters] = useState(INITIAL_FILTERS)
+  const [page, setPage] = useState(1)
+  const { results, total, loading, error, hasAnyFilter, pageSize } = useCandidateFilterSearch(filters, page)
+
+  function handleFilterChange(key, value) {
+    setFilters((f) => ({ ...f, [key]: value }))
+    setPage(1)
+  }
+
+  return (
+    <>
+      <AdvancedSearchFilters filters={filters} onChange={handleFilterChange} />
+      <div className="flex-1 overflow-auto px-4 sm:px-6 py-4">
+        {hasAnyFilter ? (
+          <AdvancedSearchResults results={results} loading={loading} error={error} onSelect={onSelect} />
+        ) : (
+          <EmptyState message="Enter a keyword or filter to search candidates" />
+        )}
+      </div>
+      {hasAnyFilter && !loading && total > 0 && (
+        <Pagination total={total} page={page} perPage={pageSize} onChange={setPage} />
+      )}
+    </>
+  )
+}
+
+// ─── page ──────────────────────────────────────────────────────────────────────────────────
+
+export default function TalentSearch() {
+  const [activeTab, setActiveTab] = useState('advanced')
 
   const [selectedCandidate, setSelectedCandidate] = useState(null)
   const [pendingSelect, setPendingSelect] = useState(null)
@@ -75,9 +170,9 @@ export default function TalentSearch() {
     }
   }
 
-  // Search results only carry the reduced field set search_candidates_by_embedding returns, not
-  // the full CANDIDATE_FIELDS shape CandidatePanel expects to seed its edit form — fetch the full
-  // row before opening the panel, same pattern Pipeline.jsx uses for cross-page navigation.
+  // Both tabs' results carry a reduced field set, not the full CANDIDATE_FIELDS shape
+  // CandidatePanel expects to seed its edit form — fetch the full row before opening the panel,
+  // same pattern Pipeline.jsx uses for cross-page navigation.
   async function handleResultClick(id) {
     const { data } = await supabase.from('candidates').select(CANDIDATE_FIELDS).eq('id', id).single()
     if (data) handleSelect(data)
@@ -86,21 +181,27 @@ export default function TalentSearch() {
   return (
     <AppShell title="Talent Search">
       <div className="flex flex-col h-full">
-        <CandidateSearchBar
-          value={query}
-          onChange={setQuery}
-          loading={loading}
-          error={error}
-          resultCount={results.length}
-        />
-
-        <div className="flex-1 overflow-auto px-4 sm:px-6 py-4">
-          {query.trim() ? (
-            <SearchResults results={results} loading={loading} error={error} onSelect={handleResultClick} />
-          ) : (
-            <EmptyPrompt />
-          )}
+        <div className="px-4 sm:px-6 border-b border-[#F0F0F4] bg-white flex items-center gap-1 shrink-0 overflow-x-auto">
+          {TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === id
+                  ? 'border-[#5E6AD2] text-[#5E6AD2]'
+                  : 'border-transparent text-[#999] hover:text-[#666]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+
+        {activeTab === 'advanced' ? (
+          <AdvancedSearchTab onSelect={handleResultClick} />
+        ) : (
+          <SmartSearchTab onSelect={handleResultClick} />
+        )}
       </div>
 
       <CandidatePanel
