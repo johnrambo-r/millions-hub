@@ -1,5 +1,13 @@
-// Extracts raw text from a candidate's resume (mammoth for .docx, pdf.js for .pdf) and stores it
+// Extracts raw text from a candidate's resume (mammoth for .docx, unpdf for .pdf) and stores it
 // on candidates.resume_text, so it can later be embedded for semantic search.
+//
+// unpdf (not pdfjs-dist directly) for PDFs: pdfjs-dist's legacy Node/Deno build lazily
+// require()s @napi-rs/canvas as an optional canvas factory it never actually needs for text
+// extraction (only for rendering, which this function never does) -- but Deno's npm resolver
+// still pulls in all 11 platform-specific native binary packages for that optional dependency
+// when building the deploy bundle, which alone pushed this function's bundle past Supabase's
+// deploy size limit (413 request entity too large at ~32MB). unpdf wraps pdf.js with a
+// canvas-free build made for exactly this (serverless/edge) use case.
 //
 // Two invocation modes, mirroring embed-resume:
 //   - { candidate_id }  -- single candidate, called fire-and-forget from create_candidate() the
@@ -24,7 +32,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { Buffer } from "node:buffer";
 import mammoth from "mammoth";
-import * as pdfjsLib from "pdfjs-dist";
+import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
 
 const MAX_EXTRACTION_ATTEMPTS = 5;
 const RESUME_URL_MARKER = "/storage/v1/object/public/resumes/";
@@ -45,20 +53,9 @@ async function extractText(bytes: Uint8Array, path: string): Promise<string> {
   }
 
   if (lower.endsWith(".pdf")) {
-    const doc = await pdfjsLib.getDocument({
-      data: bytes,
-      useWorkerFetch: false,
-      useSystemFonts: true,
-    }).promise;
-
-    let fullText = "";
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      // deno-lint-ignore no-explicit-any
-      fullText += content.items.map((it: any) => it.str ?? "").join(" ") + "\n";
-    }
-    return fullText.trim();
+    const doc = await getDocumentProxy(bytes);
+    const { text } = await extractPdfText(doc, { mergePages: true });
+    return text.trim();
   }
 
   if (lower.endsWith(".doc")) {

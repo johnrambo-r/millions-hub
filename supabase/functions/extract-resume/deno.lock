@@ -8,7 +8,7 @@
     "npm:@supabase/realtime-js@2.116.0": "2.116.0",
     "npm:@supabase/storage-js@2.116.0": "2.116.0",
     "npm:mammoth@1.12.0": "1.12.0",
-    "npm:pdfjs-dist@5.7.284": "5.7.284"
+    "npm:unpdf@1.3.2": "1.3.2"
   },
   "jsr": {
     "@supabase/supabase-js@2.116.0": {
@@ -23,77 +23,6 @@
     }
   },
   "npm": {
-    "@napi-rs/canvas-android-arm64@0.1.100": {
-      "integrity": "sha512-hjhCKhntPv9+t4ckHymdx0phYNcVW+GKQR6Lzw2zE+pOVjOplSmtx9nNNknTjbEDLcuLZqA1y8ufKg1XfgftzQ==",
-      "os": ["android"],
-      "cpu": ["arm64"]
-    },
-    "@napi-rs/canvas-darwin-arm64@0.1.100": {
-      "integrity": "sha512-2PcswRaC7Ly645DGt88///zuFDhJxJYdKAs1uU3mfk1atYkXufgcgLfBpk6Tm12nCQBaNt1wpybuPZ4qOhTo8A==",
-      "os": ["darwin"],
-      "cpu": ["arm64"]
-    },
-    "@napi-rs/canvas-darwin-x64@0.1.100": {
-      "integrity": "sha512-ePNZtj7pNIva/siZMg+HmbeozkIjqUIYdoymH8HaA3qK7LfzFN4WMBM8G6HQ9ZC+H3+Dnn5pqtiXpgLykaPOhw==",
-      "os": ["darwin"],
-      "cpu": ["x64"]
-    },
-    "@napi-rs/canvas-linux-arm-gnueabihf@0.1.100": {
-      "integrity": "sha512-d5cDB48oWFGU8/XPhUOFAlySgb/VAu7D+s8fi55K1Pcfg8aPplHWqMgibhVLU8ky7Pyg/fuiVLz4Nf3JrSTuUA==",
-      "os": ["linux"],
-      "cpu": ["arm"]
-    },
-    "@napi-rs/canvas-linux-arm64-gnu@0.1.100": {
-      "integrity": "sha512-rDxgxRu69RvDlX/bh9o22DxLsGr8EqsNgotL9+RwQE1S0b0cqeatqsw6aW45mukm0B42DIAaAacKaYQ8cqS1nw==",
-      "os": ["linux"],
-      "cpu": ["arm64"]
-    },
-    "@napi-rs/canvas-linux-arm64-musl@0.1.100": {
-      "integrity": "sha512-K3mDW66N+xT2/V439u1alFANiBUjdEx2gLiNYnCmUsva5jZMxWTjafBYwTzYK+EMFMHrUoabuU+T1BIP5CgbYQ==",
-      "os": ["linux"],
-      "cpu": ["arm64"]
-    },
-    "@napi-rs/canvas-linux-riscv64-gnu@0.1.100": {
-      "integrity": "sha512-mooqUBTIsccZpnoQC4NgrC1v6C1vof39etLNMnBwCY+p0gajWJvAHLGQ6g/gGyS5YrpDW+GefSN4+Cvcr08UWw==",
-      "os": ["linux"],
-      "cpu": ["riscv64"]
-    },
-    "@napi-rs/canvas-linux-x64-gnu@0.1.100": {
-      "integrity": "sha512-1eCvkDCazm7FFhsT7DfGOdSaHgZVK3bt/dSBl5EWHOWmnz+I7j8tPseJqqD81NF+MH21jKUK4wQSDjN0mdhnTg==",
-      "os": ["linux"],
-      "cpu": ["x64"]
-    },
-    "@napi-rs/canvas-linux-x64-musl@0.1.100": {
-      "integrity": "sha512-20arT6lnI19S68qNlii73TSEDbECNgzMz2EpldC1V3mZFuRkeujXkcebRk0LRJe9SEUAooYiLokfMViY8IX7yA==",
-      "os": ["linux"],
-      "cpu": ["x64"]
-    },
-    "@napi-rs/canvas-win32-arm64-msvc@0.1.100": {
-      "integrity": "sha512-DZFFT1wIAg37LJw37yhMRFfjATd3vTQzjZ1Yki8u2vhO6Hi5VE6BVaGQ1aaDu7xb4iMErz+9EOwjpS7xcxFeBw==",
-      "os": ["win32"],
-      "cpu": ["arm64"]
-    },
-    "@napi-rs/canvas-win32-x64-msvc@0.1.100": {
-      "integrity": "sha512-MyT1j3mHC2+Lu4pBi9mKyMJhtP6U7k7EldY7sj/uS5gJA65gTXt8MefJQXLJo5d/vZbuWmfxzkEUNc/urV3pHA==",
-      "os": ["win32"],
-      "cpu": ["x64"]
-    },
-    "@napi-rs/canvas@0.1.100": {
-      "integrity": "sha512-xglYA6q3XO5P3BNJYxVZ1IV7DLVjp1Py6nwag88YntrS+3vKHyYcMqXVS4ZztJmwz2uGvz1FWhI/4LgbR5uQDA==",
-      "optionalDependencies": [
-        "@napi-rs/canvas-android-arm64",
-        "@napi-rs/canvas-darwin-arm64",
-        "@napi-rs/canvas-darwin-x64",
-        "@napi-rs/canvas-linux-arm-gnueabihf",
-        "@napi-rs/canvas-linux-arm64-gnu",
-        "@napi-rs/canvas-linux-arm64-musl",
-        "@napi-rs/canvas-linux-riscv64-gnu",
-        "@napi-rs/canvas-linux-x64-gnu",
-        "@napi-rs/canvas-linux-x64-musl",
-        "@napi-rs/canvas-win32-arm64-msvc",
-        "@napi-rs/canvas-win32-x64-msvc"
-      ]
-    },
     "@supabase/auth-js@2.116.0": {
       "integrity": "sha512-Cmosty12gyKGK9N3bQb+lMmuAFev5nmUzaR1AsmZHqKOAGzqX1VQzmp49CNPwOx/pw0H9Qqk4rs9yhwTlKpfDg==",
       "dependencies": [
@@ -216,12 +145,6 @@
     "path-is-absolute@1.0.1": {
       "integrity": "sha512-AVbw3UJ2e9bq64vSaS9Am0fje1Pa8pbGqTTsmXfaIiMpnr5DlDhfJOuLj9Sf95ZPVDAUerDfEk88MPmPe7UCQg=="
     },
-    "pdfjs-dist@5.7.284": {
-      "integrity": "sha512-h4EdYQczmGhbOlqc3PPZwxevn7ApdWPbovAuWXOB/DjIyigSnwfy2oze7c6mRcSr9XgLp3eN3EeL4DyySTPMFw==",
-      "optionalDependencies": [
-        "@napi-rs/canvas"
-      ]
-    },
     "process-nextick-args@2.0.1": {
       "integrity": "sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag=="
     },
@@ -258,6 +181,9 @@
     "underscore@1.13.8": {
       "integrity": "sha512-DXtD3ZtEQzc7M8m4cXotyHR+FAS18C64asBYY5vqZexfYryNNnDc02W4hKg3rdQuqOYas1jkseX0+nZXjTXnvQ=="
     },
+    "unpdf@1.3.2": {
+      "integrity": "sha512-TWh+7yNL4K9Rn3sjTTMjHhBNxXsrtvIw/nEdYWzLyJU9SZ33s2BhoCSNRG+aUhm/KkdMO6/WK8U6NqRw7fSF4A=="
+    },
     "util-deprecate@1.0.2": {
       "integrity": "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw=="
     },
@@ -269,7 +195,7 @@
     "dependencies": [
       "jsr:@supabase/supabase-js@2",
       "npm:mammoth@1.12.0",
-      "npm:pdfjs-dist@5.7.284"
+      "npm:unpdf@1.3.2"
     ]
   }
 }

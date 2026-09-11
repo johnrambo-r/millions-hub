@@ -69,43 +69,11 @@ $$;
 
 GRANT EXECUTE ON FUNCTION create_candidate(jsonb) TO authenticated;
 
--- Periodic sweeps: catch anything the live best-effort path missed. Same cron -> pg_net ->
--- Edge Function shape as fire-interview-reminders; each call with an empty body puts the target
--- function into sweep mode (see the two functions' own comments for exactly which rows that
--- picks up and the retry ceiling).
---
--- Two separate jobs, not one, because extraction and embedding are independent failure domains
--- with independent retry state (extraction_attempts vs embedding_attempts) -- a candidate stuck
--- on a transient embedding failure shouldn't cause its (already-successful) extraction to be
--- re-attempted, and vice versa.
-SELECT cron.schedule(
-  'sweep-pending-candidate-extractions',
-  '*/15 * * * *',
-  $cron_body$
-    SELECT net.http_post(
-      url     := (SELECT value FROM public.hub_settings WHERE key = 'supabase_url')
-                 || '/functions/v1/extract-resume',
-      headers := jsonb_build_object(
-        'Content-Type',  'application/json',
-        'Authorization', 'Bearer ' || (SELECT value FROM public.hub_settings WHERE key = 'service_role_key')
-      ),
-      body    := '{}'::jsonb
-    ) as request_id;
-  $cron_body$
-);
-
-SELECT cron.schedule(
-  'sweep-pending-candidate-embeddings',
-  '*/15 * * * *',
-  $cron_body$
-    SELECT net.http_post(
-      url     := (SELECT value FROM public.hub_settings WHERE key = 'supabase_url')
-                 || '/functions/v1/embed-resume',
-      headers := jsonb_build_object(
-        'Content-Type',  'application/json',
-        'Authorization', 'Bearer ' || (SELECT value FROM public.hub_settings WHERE key = 'service_role_key')
-      ),
-      body    := '{}'::jsonb
-    ) as request_id;
-  $cron_body$
-);
+-- The periodic sweep cron jobs are deliberately NOT scheduled here -- see
+-- 20260911040000_schedule_resume_extraction_embedding_sweeps.sql. Sweep mode processes up to 20
+-- real pending candidates per call (confirmed directly against production during testing, not a
+-- dry-run), so scheduling it before the ~477-candidate backfill has been explicitly reviewed and
+-- run would mean the cron quietly does the bulk of that backfill on its own, 15 minutes at a
+-- time, instead of the reviewed/approved script. This migration only wires up extraction for
+-- *new* candidates going forward; the sweep jobs (whose real job is catching stragglers/retries,
+-- not doing the initial backfill) get scheduled once the full backfill is done.
