@@ -2,7 +2,7 @@ import { useState } from 'react'
 import AppShell from '../components/layout/AppShell'
 import CandidateSearchBar from '../components/pipeline/CandidateSearchBar'
 import AdvancedSearchFilters from '../components/pipeline/AdvancedSearchFilters'
-import CandidateCard from '../components/pipeline/CandidateCard'
+import SearchResultCard from '../components/pipeline/SearchResultCard'
 import CandidatePanel from '../components/pipeline/CandidatePanel'
 import Pagination from '../components/Pagination'
 import useCandidateSearch from '../hooks/useCandidateSearch'
@@ -30,6 +30,10 @@ function EmptyState({ message }) {
   return <p className="text-sm text-[#999] text-center py-16">{message}</p>
 }
 
+// Responsive result grid: 1 col mobile, 2 cols narrow window/small laptop (≥768px), 3 cols
+// standard desktop/laptop (≥1280px), 4 cols wide desktop (≥1600px) — per build brief.
+const RESULTS_GRID = 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 3xl:grid-cols-4 gap-4'
+
 // ─── Smart Search (unchanged behavior, just extracted into its own tab component) ────────────
 
 function SmartSearchEmptyPrompt() {
@@ -52,19 +56,18 @@ function SmartSearchResults({ results, loading, error, onSelect }) {
   if (results.length === 0) return <EmptyState message="No matching candidates found" />
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className={RESULTS_GRID}>
       {results.map((r) => (
-        <CandidateCard
+        <SearchResultCard
           key={r.id}
           onClick={() => onSelect(r.id)}
           name={r.name}
-          meta={[r.skill_role, r.current_company].filter(Boolean).join(' · ') || undefined}
-          detailLines={[
-            r.current_location,
-            r.total_exp != null ? `${r.total_exp} yrs experience` : null,
-            r.phone,
-            `${Math.round(r.similarity * 100)}% match`,
-          ].filter(Boolean)}
+          skillRole={r.skill_role}
+          location={r.current_location}
+          experience={r.total_exp}
+          email={r.email}
+          phone={r.phone}
+          matchPercent={r.similarity}
         />
       ))}
     </div>
@@ -117,19 +120,17 @@ function AdvancedSearchResults({ results, loading, error, onSelect }) {
   if (results.length === 0) return <EmptyState message="No matching candidates found" />
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className={RESULTS_GRID}>
       {results.map((r) => (
-        <CandidateCard
+        <SearchResultCard
           key={r.id}
           onClick={() => onSelect(r.id)}
           name={r.name}
-          meta={[r.skill_role, r.current_company].filter(Boolean).join(' · ') || undefined}
-          detailLines={[
-            r.current_location,
-            r.total_exp != null ? `${r.total_exp} yrs experience` : null,
-            r.education,
-            r.phone,
-          ].filter(Boolean)}
+          skillRole={r.skill_role}
+          location={r.current_location}
+          experience={r.total_exp}
+          email={r.email}
+          phone={r.phone}
         />
       ))}
     </div>

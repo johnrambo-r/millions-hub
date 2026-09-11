@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+@theme {
+  /* Wide-desktop breakpoint for the Talent Search results grid (4-column layout) — a named
+     breakpoint sorts correctly against xl/2xl in generated CSS; an arbitrary `min-[1600px]:`
+     variant does not (it can generate earlier in the stylesheet than `xl:`, so at >=1600px the
+     xl:grid-cols-3 rule still wins the cascade). */
+  --breakpoint-3xl: 100rem;
+}
