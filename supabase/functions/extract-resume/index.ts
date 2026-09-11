@@ -44,18 +44,35 @@ function extractStoragePath(url: string | null): string | null {
   return idx === -1 ? null : url.slice(idx + RESUME_URL_MARKER.length);
 }
 
+// Postgres text columns cannot contain the NUL byte -- confirmed present in real extracted PDF
+// text from malformed font/glyph mappings (the source of the "TT: undefined function" /
+// "invalid function id" warnings pdf.js logs for the same files), which previously surfaced as
+// "unsupported Unicode escape sequence" failing the save, not the extraction itself. Strips all
+// C0 control characters (code points below 32) except normal whitespace (tab=9, newline=10,
+// carriage return=13). Written as a codePointAt loop, not a regex character class, so no literal
+// control bytes need to appear anywhere in this source file.
+function sanitizeExtractedText(text: string): string {
+  let result = "";
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    const isStrippedControlChar = code < 32 && code !== 9 && code !== 10 && code !== 13;
+    if (!isStrippedControlChar) result += ch;
+  }
+  return result;
+}
+
 async function extractText(bytes: Uint8Array, path: string): Promise<string> {
   const lower = path.toLowerCase();
 
   if (lower.endsWith(".docx")) {
     const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
-    return result.value.trim();
+    return sanitizeExtractedText(result.value.trim());
   }
 
   if (lower.endsWith(".pdf")) {
     const doc = await getDocumentProxy(bytes);
     const { text } = await extractPdfText(doc, { mergePages: true });
-    return text.trim();
+    return sanitizeExtractedText(text.trim());
   }
 
   if (lower.endsWith(".doc")) {

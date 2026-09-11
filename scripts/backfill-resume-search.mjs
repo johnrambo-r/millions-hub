@@ -90,12 +90,26 @@ async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// Postgres text columns cannot contain the NUL byte -- seen in real extracted PDF text from
+// malformed font/glyph mappings. Strips all C0 control characters (code points below 32) except
+// normal whitespace (tab=9, newline=10, carriage return=13). Written as a codePointAt loop, not
+// a regex character class, to avoid any literal control bytes in this source file.
+function sanitizeExtractedText(text) {
+  let result = ''
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0
+    const isStrippedControlChar = code < 32 && code !== 9 && code !== 10 && code !== 13
+    if (!isStrippedControlChar) result += ch
+  }
+  return result
+}
+
 async function extractText(bytes, path) {
   const lower = path.toLowerCase()
 
   if (lower.endsWith('.docx')) {
     const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) })
-    return result.value.trim()
+    return sanitizeExtractedText(result.value.trim())
   }
 
   if (lower.endsWith('.pdf')) {
@@ -111,7 +125,7 @@ async function extractText(bytes, path) {
       const content = await page.getTextContent()
       fullText += content.items.map((it) => it.str ?? '').join(' ') + '\n'
     }
-    return fullText.trim()
+    return sanitizeExtractedText(fullText.trim())
   }
 
   if (lower.endsWith('.doc')) {
